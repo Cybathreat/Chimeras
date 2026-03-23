@@ -1,0 +1,1 @@
+# SwarmBots core package
