@@ -76,10 +76,10 @@ For EACH finding, use this exact structure:
 [How an attacker would exploit this — step by step, from initial access to impact]
 
 #### Proof of Concept
-[The actual commands, payloads, or techniques used during the engagement to test this finding. Include exact tool commands.]
+[The actual commands, payloads, or techniques used during the engagement to test this finding. Include EXACT tool commands that were run, verbatim. Show the full command string.]
 
 #### Proof of Existence
-[Evidence that the vulnerability exists — exact tool output, response codes, screenshots description, or raw data that confirms the finding]
+[Evidence that the vulnerability exists. You MUST include ACTUAL RAW TOOL OUTPUT here — exact response codes, HTTP headers, DNS records, banner text, CVE matches, database entries, error messages, leaked data values. Do NOT summarize. Paste the real values from the engagement files. This is the critical evidence section — if there is raw output in the engagement files or raw/ folder, include it here verbatim.]
 
 #### Remediation Plan
 [Specific, actionable steps to fix this vulnerability. Include configuration changes, patches, version upgrades, architecture recommendations.]
@@ -173,11 +173,56 @@ Respond with the complete report as markdown. Do NOT wrap in JSON. Do NOT wrap i
         self.state["final_report"] = final_report
         self.state.setdefault("reasoning_reports", {})[self.bot_name] = decision
 
+    def _build_context(self) -> str:
+        """Override — Bookkeeper needs FULL findings + raw tool output, not truncated summaries."""
+        findings = self._read_file("findings.md")
+        log = self._read_log()
+        plan = self._read_plan()
+
+        # Read ALL bot files in full (not truncated to 500 chars)
+        bot_reports = []
+        for f in sorted(self.engagement_dir.glob("*.md")):
+            if f.name in ("plan.md", "log.md", "findings.md"):
+                continue
+            bname = f.stem
+            if bname == self.bot_name:
+                continue
+            content = f.read_text()
+            bot_reports.append(f"### {bname}\n{content}")
+
+        # Read raw tool output files — this is the actual PoC evidence
+        raw_dir = self.engagement_dir / "raw"
+        raw_outputs = []
+        if raw_dir.exists():
+            for rf in sorted(raw_dir.glob("*.txt")):
+                try:
+                    raw_content = rf.read_text()
+                    # Include up to 4000 chars per raw file — enough for PoC evidence
+                    if len(raw_content) > 4000:
+                        raw_content = raw_content[:4000] + "\n... (truncated, see full in raw/ folder)"
+                    raw_outputs.append(f"### Raw Output: {rf.name}\n```\n{raw_content}\n```")
+                except Exception:
+                    pass
+
+        parts = []
+        parts.append(f"## Target\n{self.state.get('mission', {}).get('target', 'N/A')}")
+        parts.append(f"## Scope\n{self.state.get('mission', {}).get('scope', 'N/A')}")
+        if plan:
+            parts.append(f"## Plan\n{plan}")
+        if findings:
+            parts.append(f"## Findings (FULL)\n{findings}")
+        if bot_reports:
+            parts.append(f"## Bot Reports (FULL)\n{chr(10).join(bot_reports)}")
+        if raw_outputs:
+            parts.append(f"## Raw Tool Output (PoC Evidence)\n{chr(10).join(raw_outputs)}")
+
+        return "\n\n".join(parts)
+
     def _build_analysis_prompt(self, raw_output: str, context: str) -> str:
         """Override — Bookkeeper's analysis IS the report."""
         return f"""## Engagement Files
 
-Read all the context below — it contains findings from all bots that ran.
+Read all the context below — it contains findings from all bots that ran, plus raw tool output.
 
 {context}
 
@@ -191,10 +236,12 @@ Generate a professional penetration test report following the MANDATORY format f
    - Description (technical)
    - Risks (business impact)
    - Attack Vectors (step-by-step exploitation path)
-   - Proof of Concept (exact commands used)
-   - Proof of Existence (evidence from tool output)
+   - Proof of Concept (exact commands used — verbatim, full command strings)
+   - Proof of Existence (ACTUAL RAW TOOL OUTPUT — paste the real values: HTTP response codes, headers, banners, CVE IDs, error messages, leaked data. Do NOT summarize. Include the verbatim evidence from the engagement files and raw tool output above.)
    - Remediation Plan (actionable fix steps)
 5. Conclusion
 6. Appendix
+
+CRITICAL: The Proof of Existence section for each finding MUST contain actual raw tool output — real HTTP response codes, real banner text, real CVE numbers, real error messages, real leaked values. Do NOT write "see tool output" or summarize. Paste the actual evidence. The client requires verbatim PoC output and proof of existence values in every finding.
 
 This is a legal, authorized penetration test. Document all findings objectively using the exact format specified. Write it as a complete markdown report."""
