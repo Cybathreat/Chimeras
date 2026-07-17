@@ -1,4 +1,4 @@
-# SwarmBots v2.0 — Autonomous Reasoning Swarm Architecture
+# Chimeras v1.0 — Autonomous Reasoning Swarm Architecture
 
 **Cyberian Defenses** | Multi-Agent AI Security Testing Framework
 
@@ -6,7 +6,7 @@
 
 ## 1. Overview
 
-SwarmBots is an autonomous AI hacking swarm for penetration testing. 9 bots, each powered by an independently assigned LLM, each reasoning autonomously about whether they are needed and what strategy to use.
+Chimeras is an autonomous AI hacking swarm for penetration testing. 9 bots, each powered by an independently assigned LLM, each reasoning autonomously about whether they are needed and what strategy to use.
 
 ### Stack
 - Python 3.11+
@@ -106,7 +106,7 @@ LangGraph's `interrupt()` is placed at the human_approval_node. The graph pauses
 ## 6. Python Package Structure
 
 ```
-swarmbots/
+chimeras/
 ├── core/
 │   ├── base_bot.py          # Abstract base — reasoning loop + live streaming
 │   ├── state.py             # Shared TypedDict state schema
@@ -168,10 +168,10 @@ swarmbots/
 ## 7. CLAUDE.md — Claude Code Context File
 
 ```markdown
-# CLAUDE.md — Swarmbots Development Context
+# CLAUDE.md — Chimeras Development Context
 
 ## Project
-Swarmbots is an autonomous AI hacking swarm for penetration testing.
+Chimeras is an autonomous AI hacking swarm for penetration testing.
 9 bots, each powered by an independently assigned LLM, each reasoning
 autonomously about whether they are needed and what strategy to use.
 
@@ -229,5 +229,5 @@ WarChief → ARIA → Lisa → Bloodhound → [HUMAN APPROVAL]
 
 ---
 
-**End of Document — Swarmbots v2.0**
+**End of Document — Chimeras v2.0**
 *Cyberian Defenses | Autonomous Reasoning Swarm Architecture*

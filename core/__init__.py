@@ -1,1 +1,1 @@
-# SwarmBots core package
+# Chimeras core package

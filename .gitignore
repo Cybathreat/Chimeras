@@ -24,6 +24,11 @@ wheels/
 venv/
 env/
 ENV/
+.venv/
+
+# Environment files
+.env
+.env.*
 
 # IDE
 .idea/
@@ -31,8 +36,9 @@ ENV/
 *.swp
 *.swo
 
-# Mission data (per-operation)
+# Mission data (per-operation workspaces)
 mission/
+mission_*/
 *.log
 
 # OS

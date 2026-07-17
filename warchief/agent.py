@@ -1,131 +1,81 @@
 """
-SwarmBots v2.0 — WarChief Agent
+Chimeras v1.0 — WarChief Agent
 
-Supervisor/orchestrator bot. Coordinates all other bots,
-reads reasoning reports, and routes the graph flow.
+Supervisor/orchestrator. Reads engagement files, decides next bot,
+writes strategic plan. No tool execution — file I/O only.
 """
 
 from typing import Dict, Any, Optional
+from datetime import datetime
+import json
+
 from core.base_bot import BaseBot
 from core.state import SwarmState
 
 
 class WarChief(BaseBot):
-    """
-    WarChief - Supervisor/Orchestrator
-    
-    Role: Reads all reasoning reports, decides next node,
-    manages human approval gate, and triggers final report.
-    """
-    
+    """WarChief — Supervisor and Orchestrator. File I/O only, no tools."""
+
     bot_name = "warchief"
-    role_description = "the swarm supervisor and orchestrator"
-    
+    role_description = "swarm supervisor and orchestrator — reads all bot reports, decides next action, writes engagement plan"
+    scope_description = "Orchestrator ONLY. Reads engagement files, writes plan.md, coordinates bot flow. NO tool execution."
+
     def __init__(self, state: SwarmState, swarm_config: Optional[Dict[str, Any]] = None):
         super().__init__(state, swarm_config)
-        self._prompt = self._build_supervisor_prompt()
-    
-    def _build_supervisor_prompt(self) -> str:
-        """Build WarChief's system prompt."""
-        return f"""You are WarChief, the supervisor and orchestrator of the SwarmBots multi-agent system.
 
-Your responsibilities:
-1. Review all bot reasoning reports in the shared state
-2. Determine which bot should execute next based on mission phase
-3. Manage the human-in-loop approval gate for exploitation
-4. Coordinate parallel execution when appropriate (Magician + Thief)
-5. Trigger Bookkeeper for final report generation
-6. Monitor abort_flag and kill all bots if emergency stop requested
+    def _build_system_prompt(self) -> str:
+        """Override — WarChief decides flow, doesn't run tools."""
+        return f"""You are {self.bot_name}, {self.role_description}.
 
-Current State:
-{self.state}
+## Your Scope
+{self.scope_description}
 
-Think strategically. The mission success depends on your coordination."""
-    
-    async def reason(self) -> Dict[str, Any]:
-        """
-        WarChief reasoning: assess state, determine next action.
-        """
-        self._log("Assessing swarm state...", "REASON")
-        
-        reasoning_reports = self.state.get("reasoning_reports", {})
-        human_approval = self.state.get("human_approval", False)
-        abort_flag = self.state.get("abort_flag", False)
-        
-        # Check for emergency stop
-        if abort_flag:
-            self._log("ABORT FLAG DETECTED - Killing all bots", "CRITICAL")
-            return {
-                "needed": True,
-                "strategy": "abort",
-                "confidence": 1.0,
-                "reasoning": "Emergency stop requested. Terminating all operations.",
-                "recommended_actions": ["terminate_all"],
-                "next_node": "END"
-            }
-        
-        # Determine mission phase and next node
-        if not reasoning_reports.get("aria"):
-            next_node = "aria"
-            strategy = "initiate_recon"
-        elif not reasoning_reports.get("lisa"):
-            next_node = "lisa"
-            strategy = "initiate_scan"
-        elif not reasoning_reports.get("bloodhound"):
-            next_node = "bloodhound"
-            strategy = "initiate_vuln_hunt"
-        elif not human_approval:
-            next_node = "human_approval"
-            strategy = "await_exploitation_approval"
-        elif not reasoning_reports.get("surgeon"):
-            next_node = "surgeon"
-            strategy = "initiate_exploitation"
-        elif not reasoning_reports.get("magician") or not reasoning_reports.get("thief"):
-            next_node = "magician_thief_parallel"
-            strategy = "parallel_privesc_exfil"
-        else:
-            next_node = "bookkeeper_final"
-            strategy = "generate_final_report"
-        
-        self._log(f"Next phase: {next_node}", "DECIDE")
-        
-        return {
-            "needed": True,
-            "strategy": strategy,
-            "confidence": 0.95,
-            "reasoning": f"Mission phase assessment complete. Next node: {next_node}",
-            "recommended_actions": [strategy],
-            "next_node": next_node
-        }
-    
-    async def execute(self) -> Dict[str, Any]:
-        """
-        WarChief execution: route to next node, manage state.
-        """
-        self._log("Executing coordination...", "EXECUTE")
-        
-        reasoning_reports = self.state.get("reasoning_reports", {})
-        next_node = reasoning_reports.get(self.bot_name, {}).get("next_node", "aria")
-        
-        self._append_ledger("coordination", {"next_node": next_node})
-        
-        return {
-            "next_node": next_node,
-            "bots_deployed": list(reasoning_reports.keys()),
-            "mission_phase": self._determine_phase()
-        }
-    
-    def _determine_phase(self) -> str:
-        """Determine current mission phase."""
-        reports = self.state.get("reasoning_reports", {})
-        if "thief" in reports and "magician" in reports:
-            return "exfil_complete"
-        if "surgeon" in reports:
-            return "exploitation"
-        if "bloodhound" in reports:
-            return "vuln_detection"
-        if "lisa" in reports:
-            return "scanning"
-        if "aria" in reports:
-            return "recon"
-        return "init"
+## Pipeline Order
+WarChief → ARIA (recon) → Lisa (scan) → Bloodhound (vuln) → [HUMAN APPROVAL]
+→ Pathologist (payloads) → Surgeon (exploit) → Magician (privesc) → Thief (exfil) → Bookkeeper (report)
+
+## Your Task
+1. Read the engagement files to understand what bots have reported
+2. Assess the current mission phase
+3. Write a strategic plan for the next phase
+4. Decide which bot should run next
+
+## Response Format
+Respond ONLY with a JSON block:
+```json
+{{
+  "needed": true,
+  "strategy": "brief description of coordination approach",
+  "confidence": 0.95,
+  "reasoning": "why you are needed and what you will coordinate",
+  "commands": [],
+  "next_bot": "name of the next bot to activate (or 'END' if mission complete)",
+  "mission_phase": "current phase: init/recon/scan/vuln/exploitation/post-exploit/report/complete",
+  "plan_content": "markdown strategic plan for plan.md"
+}}
+```
+No other text. Just the JSON."""
+
+    def _build_analysis_prompt(self, raw_output: str, context: str) -> str:
+        """WarChief doesn't analyze tool output — it writes the plan."""
+        return f"""## Current Engagement State
+
+{context}
+
+## Your Task
+Based on the engagement files above, determine:
+1. What phase are we in?
+2. What has been completed?
+3. What bot should run next?
+4. Write a strategic plan update for plan.md"""
+
+    def _update_state(self, decision: Dict[str, Any], analysis: Dict[str, Any], tool_results: list):
+        """Update state with WarChief's coordination."""
+        # Write plan to plan.md
+        plan_content = decision.get("plan_content", analysis.get("plan_content", ""))
+        if plan_content:
+            plan_path = self.engagement_dir / "plan.md"
+            existing = plan_path.read_text() if plan_path.exists() else ""
+            plan_path.write_text(existing + f"\n\n## WarChief Assessment ({datetime.utcnow().isoformat()})\n\n{plan_content}\n")
+
+        self.state.setdefault("reasoning_reports", {})[self.bot_name] = decision

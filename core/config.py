@@ -1,8 +1,8 @@
 """
-SwarmBots v2.0 — Project Setup CLI and Configuration Manager
+Chimeras v1.0 — Config Manager + Interactive Setup
 
 Handles mission initialization, swarm-config.json management,
-and LLM model selection.
+engagement folder structure, and interactive CLI setup.
 """
 
 import json
@@ -17,57 +17,97 @@ DEFAULT_SWARM_CONFIG = {
     "created": None,
     "mission_name": None,
     "bots": {
-        "warchief": {"provider": "anthropic", "model": "claude-opus-4-6-20250929"},
-        "aria": {"provider": "ollama", "model": "qwen2.5:14b"},
-        "lisa": {"provider": "google", "model": "gemini-2.5-flash"},
-        "bloodhound": {"provider": "anthropic", "model": "claude-sonnet-4-6-20250929"},
-        "surgeon": {"provider": "anthropic", "model": "claude-opus-4-6-20250929"},
-        "pathologist": {"provider": "groq", "model": "llama-3.3-70b-versatile"},
-        "thief": {"provider": "ollama", "model": "qwen2.5:14b"},
-        "magician": {"provider": "anthropic", "model": "claude-sonnet-4-6-20250929"},
-        "bookkeeper": {"provider": "ollama", "model": "qwen2.5:7b"}
+        "warchief":     {"provider": "openai", "model": "glm-5.2", "base_url": "https://ollama.com/v1"},
+        "aria":         {"provider": "openai", "model": "glm-5.2", "base_url": "https://ollama.com/v1"},
+        "lisa":         {"provider": "openai", "model": "glm-5.2", "base_url": "https://ollama.com/v1"},
+        "bloodhound":   {"provider": "openai", "model": "glm-5.2", "base_url": "https://ollama.com/v1"},
+        "surgeon":      {"provider": "openai", "model": "glm-5.2", "base_url": "https://ollama.com/v1"},
+        "pathologist":  {"provider": "openai", "model": "glm-5.2", "base_url": "https://ollama.com/v1"},
+        "thief":        {"provider": "openai", "model": "glm-5.2", "base_url": "https://ollama.com/v1"},
+        "magician":     {"provider": "openai", "model": "glm-5.2", "base_url": "https://ollama.com/v1"},
+        "bookkeeper":   {"provider": "openai", "model": "glm-5.2", "base_url": "https://ollama.com/v1"},
     },
-    "fallback_chain": ["groq", "openrouter", "ollama"],
+    "fallback_chain": ["ollama"],
     "human_approval_required": True
+}
+
+# Engagement folder structure
+ENGAGEMENT_DIRS = [
+    "report",
+    "findings",
+    "poc",
+    "raw",
+]
+
+ENGAGEMENT_FILES = {
+    "plan.md": "# Engagement Plan\n\nMission: {mission_name}\nCreated: {timestamp}\n\n## Objectives\n{objectives}\n\n## Scope\n{scope}\n\n## Rules of Engagement\n{roe}\n\n## Bot Execution Order\nWarChief → ARIA → Lisa → Bloodhound → [HUMAN APPROVAL] → Surgeon → Magician + Thief → Bookkeeper\n",
+    "log.md": "# Operation Log\n\nMission: {mission_name}\nStarted: {timestamp}\n\n## Ledger\n\n",
+    "findings.md": "# Findings\n\nMission: {mission_name}\nCreated: {timestamp}\n\n",
 }
 
 
 class ConfigManager:
-    """Manages SwarmBots configuration and mission setup."""
-    
+    """Manages Chimeras configuration, mission setup, and engagement folders."""
+
     def __init__(self, mission_dir: Optional[Path] = None):
         self.mission_dir = mission_dir or Path.cwd() / "mission"
         self.config_path = self.mission_dir / "swarm-config.json"
         self.mission_path = self.mission_dir / "mission.md"
         self.soul_path = self.mission_dir / "soul.md"
-    
-    def setup_mission(self, mission_name: str, objectives: str, scope: str, 
+
+    def setup_mission(self, mission_name: str, objectives: str, scope: str,
                       roe: str, contacts: Optional[Dict[str, str]] = None) -> Path:
         """
         Initialize a new mission workspace.
-        
+
         Creates:
         - mission/swarm-config.json
         - mission/mission.md
         - mission/soul.md
+        - mission/engagement/  (plan.md, log.md, findings.md)
+        - mission/engagement/report/
+        - mission/engagement/findings/
+        - mission/engagement/poc/
         - mission/payloads/
         - mission/exfil-staging/
         - mission/operation-vault/
         """
         self.mission_dir.mkdir(parents=True, exist_ok=True)
-        (self.mission_dir / "payloads").mkdir(exist_ok=True)
-        (self.mission_dir / "exfil-staging").mkdir(exist_ok=True)
-        (self.mission_dir / "operation-vault").mkdir(exist_ok=True)
-        
+
+        # Create operational subdirectories
+        for d in ["payloads", "exfil-staging", "operation-vault"]:
+            (self.mission_dir / d).mkdir(exist_ok=True)
+
+        # Create engagement folder structure
+        engagement_dir = self.mission_dir / "engagement"
+        engagement_dir.mkdir(exist_ok=True)
+        for d in ENGAGEMENT_DIRS:
+            (engagement_dir / d).mkdir(exist_ok=True)
+
+        timestamp = datetime.utcnow().isoformat()
+
+        # Write engagement files (plan.md, log.md, findings.md)
+        for filename, template in ENGAGEMENT_FILES.items():
+            content = template.format(
+                mission_name=mission_name,
+                timestamp=timestamp,
+                objectives=objectives,
+                scope=scope,
+                roe=roe,
+            )
+            (engagement_dir / filename).write_text(content)
+
         # Write swarm-config.json
         config = DEFAULT_SWARM_CONFIG.copy()
-        config["created"] = datetime.utcnow().isoformat()
+        config["created"] = timestamp
         config["mission_name"] = mission_name
+        # Deep copy bots dict to avoid mutation
+        config["bots"] = json.loads(json.dumps(DEFAULT_SWARM_CONFIG["bots"]))
         self._write_json(config)
-        
+
         # Write mission.md
         mission_content = f"""# Mission: {mission_name}
-Created: {datetime.utcnow().isoformat()}
+Created: {timestamp}
 
 ## Objectives
 {objectives}
@@ -80,9 +120,18 @@ Created: {datetime.utcnow().isoformat()}
 
 ## Emergency Contacts
 {json.dumps(contacts or {}, indent=2)}
+
+## Engagement Folder
+{engagement_dir}/
+  ├── plan.md       # Strategic plan, updated by WarChief
+  ├── log.md        # Operation ledger, updated by all bots
+  ├── findings.md   # Consolidated findings, updated by Bloodhound/Surgeon/Thief/Magician
+  ├── report/       # Final report directory
+  ├── findings/     # Detailed findings directory
+  └── poc/          # Proof-of-concept directory
 """
         self.mission_path.write_text(mission_content)
-        
+
         # Write soul.md
         soul_content = """# Bot Identities and Behavioral Constraints
 
@@ -114,64 +163,104 @@ Unpredictable, clever, lateral. Finds paths others cannot.
 Meticulous, impartial, complete. Records everything.
 """
         self.soul_path.write_text(soul_content)
-        
+
         return self.mission_dir
-    
+
     def load_config(self) -> Dict[str, Any]:
         """Load swarm-config.json."""
         if not self.config_path.exists():
             self._write_json(DEFAULT_SWARM_CONFIG)
         return self._read_json(self.config_path)
-    
-    def update_bot_config(self, bot_name: str, provider: str, 
-                          model: Optional[str] = None) -> None:
-        """Update a specific bot's LLM configuration."""
+
+    def update_bot_config(self, bot_name: str, provider: str,
+                          model: Optional[str] = None,
+                          base_url: Optional[str] = None) -> None:
+        """Update a specific bot's LLM configuration.
+
+        Args:
+            bot_name: Bot identifier (e.g. 'warchief')
+            provider: LLM provider (anthropic, openai, ollama, etc.)
+            model: Model name (optional — keeps existing if not provided)
+            base_url: Custom gateway/proxy URL (optional, OpenAI/Anthropic only).
+                      Can also be set via OPENAI_BASE_URL / ANTHROPIC_BASE_URL env vars.
+        """
         config = self.load_config()
-        config["bots"][bot_name] = {
+        new_config = {
             "provider": provider,
             "model": model or config["bots"][bot_name].get("model")
         }
+        if base_url:
+            new_config["base_url"] = base_url
+        config["bots"][bot_name] = new_config
         self._write_json(config)
-    
+
     def _write_json(self, data: Dict[str, Any]) -> None:
-        """Write JSON config file."""
         with open(self.config_path, "w") as f:
             json.dump(data, f, indent=2)
-    
+
     def _read_json(self, path: Path) -> Dict[str, Any]:
-        """Read JSON config file."""
         with open(path, "r") as f:
             return json.load(f)
 
 
-def setup_cli():
-    """CLI entry point for mission setup."""
-    import argparse
-    
-    parser = argparse.ArgumentParser(
-        description="SwarmBots Mission Setup CLI",
-        formatter_class=argparse.RawDescriptionHelpFormatter
-    )
-    parser.add_argument("--mission", "-m", required=True, help="Mission name")
-    parser.add_argument("--objectives", "-o", required=True, help="Mission objectives")
-    parser.add_argument("--scope", "-s", required=True, help="Scope of engagement")
-    parser.add_argument("--roe", "-r", required=True, help="Rules of engagement")
-    parser.add_argument("--dir", "-d", default="mission", help="Mission directory")
-    
-    args = parser.parse_args()
-    
-    manager = ConfigManager(Path(args.dir))
-    mission_path = manager.setup_mission(
-        mission_name=args.mission,
-        objectives=args.objectives,
-        scope=args.scope,
-        roe=args.roe
-    )
-    
-    print(f"✓ Mission initialized at: {mission_path.absolute()}")
-    print(f"  Config: {manager.config_path.absolute()}")
-    print(f"  Mission: {manager.mission_path.absolute()}")
+def interactive_setup() -> Dict[str, str]:
+    """
+    Interactive CLI setup — prompts operator for mission details.
 
+    Returns dict with: mission_name, objectives, scope, roe, dir
+    """
+    print()
+    print("=" * 60)
+    print("  CHIMERAS v2.0 — INTERACTIVE MISSION SETUP")
+    print("=" * 60)
+    print()
 
-if __name__ == "__main__":
-    setup_cli()
+    mission_name = input("Mission name: ").strip()
+    if not mission_name:
+        mission_name = "Operation Default"
+        print(f"  (using default: {mission_name})")
+
+    print()
+    objectives = input("Objectives (one line): ").strip()
+    if not objectives:
+        objectives = "Comprehensive penetration test of target infrastructure"
+        print(f"  (using default: {objectives})")
+
+    print()
+    scope = input("Scope (IPs/domains): ").strip()
+    if not scope:
+        scope = "10.10.10.0/24"
+        print(f"  (using default: {scope})")
+
+    print()
+    roe = input("Rules of Engagement: ").strip()
+    if not roe:
+        roe = "No DoS, no data destruction, stealth preferred, business hours only"
+        print(f"  (using default: {roe})")
+
+    print()
+    mission_dir = input("Mission directory [mission]: ").strip()
+    if not mission_dir:
+        mission_dir = "mission"
+
+    result = {
+        "mission_name": mission_name,
+        "objectives": objectives,
+        "scope": scope,
+        "roe": roe,
+        "dir": mission_dir,
+    }
+
+    print()
+    print("=" * 60)
+    print("  MISSION PARAMETERS CONFIRMED")
+    print("=" * 60)
+    print(f"  Name:       {mission_name}")
+    print(f"  Objectives: {objectives}")
+    print(f"  Scope:      {scope}")
+    print(f"  RoE:        {roe}")
+    print(f"  Dir:        {mission_dir}")
+    print("=" * 60)
+    print()
+
+    return result

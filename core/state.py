@@ -1,58 +1,55 @@
 """
-SwarmBots v2.0 — Shared State Schema
-
-TypedDict definition for LangGraph state management.
-All bots communicate exclusively through this shared state.
+Chimeras v1.0 — Shared State Schema
+TypedDict for LangGraph state management.
 """
 
 from typing import TypedDict, List, Dict, Any, Optional
 
 
 class SwarmState(TypedDict, total=False):
-    """
-    Shared state schema for the SwarmBots multi-agent system.
-    
-    Every field is optional (total=False) to allow incremental building.
-    """
-    
+    """Shared state schema. All fields optional for incremental building."""
+
     # Mission definition
-    mission: Dict[str, Any]  # objectives, scope, RoE, emergency contacts
-    
-    # Configuration loaded from swarm-config.json
-    swarm_config: Dict[str, Any]  # per-bot LLM provider and model assignments
-    
+    mission: Dict[str, Any]
+
+    # Configuration
+    swarm_config: Dict[str, Any]
+
+    # Engagement folder path
+    engagement_dir: str
+
     # Reasoning outputs from all bots
-    reasoning_reports: Dict[str, Dict[str, Any]]  # bot_name -> {reasoning, strategy, decision}
-    
+    reasoning_reports: Dict[str, Dict[str, Any]]
+
     # ARIA's passive reconnaissance findings
-    recon_report: Dict[str, Any]  # OSINT data, domain info, employee data, tech stack
-    
+    recon_report: Dict[str, Any]
+
     # Lisa's scan results
-    scan_report: Dict[str, Any]  # ports, services, OS, versions, banners
-    
+    scan_report: Dict[str, Any]
+
     # Bloodhound's vulnerability findings
-    vuln_report: List[Dict[str, Any]]  # list of {cve, cvss, evidence, target, recommendation}
-    
+    vuln_report: List[Dict[str, Any]]
+
     # Active exploitation sessions
-    active_sessions: List[Dict[str, Any]]  # {session_id, target, shell_type, user, timestamp}
-    
+    active_sessions: List[Dict[str, Any]]
+
     # Pathologist's payload manifest
-    payloads: List[Dict[str, Any]]  # {payload_id, type, hash, delivery_method, target}
-    
+    payloads: List[Dict[str, Any]]
+
     # Thief's exfiltration report
-    exfil_report: Dict[str, Any]  # {data_exposed, channels_used, evidence_paths}
-    
+    exfil_report: Dict[str, Any]
+
     # Magician's privilege escalation and lateral movement
-    movement_report: Dict[str, Any]  # {privilege_chain, lateral_path, compromised_hosts}
-    
-    # Bookkeeper's append-only action log
-    operation_ledger: List[Dict[str, Any]]  # {timestamp, bot, action, details}
-    
-    # Human-in-loop approval flag for exploitation phase
-    human_approval: bool  # True = proceed with exploitation, False = stop at recon/vuln
-    
+    movement_report: Dict[str, Any]
+
+    # Operation ledger
+    operation_ledger: List[Dict[str, Any]]
+
+    # Human-in-loop approval flag
+    human_approval: bool
+
     # Emergency stop flag
-    abort_flag: bool  # True = kill all active bots immediately
-    
-    # Final report (technical + executive)
-    final_report: Dict[str, Any]  # {executive_summary, technical_findings, recommendations}
+    abort_flag: bool
+
+    # Final report
+    final_report: Dict[str, Any]
