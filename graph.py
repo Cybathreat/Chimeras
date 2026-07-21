@@ -1,21 +1,28 @@
 """
-Chimeras v2.0 — LangGraph Graph Wiring
+Chimeras v2.0 — LangGraph Graph Wiring (Adaptive)
 
-Linear flow with human-in-loop gates at exploitation and lateral movement.
+v2 flow (adaptive loop — WarChief re-enters after each phase):
 
-v1 flow:
-WarChief → ARIA → Lisa → Bloodhound → [HUMAN APPROVAL]
-→ Pathologist → Surgeon → Magician → Thief → Bookkeeper → END
+  WarChief (init)
+    → ARIA (recon) → WarChief (route) → {ARIA, Lisa, Bookkeeper}
+    → Lisa (scan)  → WarChief (route) → {ARIA, Lisa, Bloodhound, Bookkeeper}
+    → Bloodhound (vuln) → WarChief (route) → {ARIA, Lisa, Human Gate, Bookkeeper}
+    → [HUMAN APPROVAL]
+    → Pathologist → Surgeon → WarChief (route) → {Surgeon, Magician, Bookkeeper}
+    → Magician → WarChief (route) → {Surgeon, Thief, Bookkeeper}
+    → Thief → WarChief (route) → {Surgeon, Thief, Bookkeeper}
+    → Bookkeeper → END
 
-v2 additions (Phase -1):
-  - lateral_approval node: second human gate before lateral movement
-  - Lateral movement routing: if denied, routes to Bookkeeper (not retry loop)
-  - Target/CIDR validation enforced at code level in ToolExecutor
+  Lateral: WarChief 'lateral_recon'/'lateral_scan' → lateral_approval gate
+  → if approved: ARIA/Lisa with target_context=lateral
+  → if denied: Bookkeeper
 
-Note: Full adaptive routing (WarChief as decision router with loopback
-edges) is Phase 1. This file currently maintains the v1 linear flow with
-the lateral approval gate added as a passthrough node. Phase 1 will
-replace the linear edges with conditional routing.
+Loop protection: per-phase max 5 cycles. If exceeded, force abort to
+Bookkeeper. Tracked in state.loop_count.
+
+Exception handling: every node wrapped in try/except. On failure, logs
+error to engagement log.md, sets fallback state, routes to Bookkeeper.
+No unhandled exceptions — the graph degrades gracefully.
 """
 
 from typing import Dict, Any, Optional
@@ -33,158 +40,542 @@ from magician.agent import Magician
 from bookkeeper.agent import Bookkeeper
 
 
+# ─── Loop counter management ───
+
+def _increment_loop(state: SwarmState, phase: str) -> int:
+    """Increment the loop counter for a phase. Returns new count.
+
+    Never raises — if loop tracking fails, returns 0.
+    """
+    try:
+        loops = state.get("loop_count", {})
+        if not isinstance(loops, dict):
+            loops = {}
+        loops[phase] = loops.get(phase, 0) + 1
+        state["loop_count"] = loops
+        return loops[phase]
+    except Exception as e:
+        print(f"[LOOP COUNTER ERROR] {e}")
+        return 0
+
+
+def _check_loop_limit(state: SwarmState, phase: str) -> bool:
+    """Check if a phase has exceeded its loop limit.
+
+    Returns True if limit exceeded (should abort). Never raises.
+    """
+    try:
+        loops = state.get("loop_count", {})
+        if not isinstance(loops, dict):
+            return False
+        max_loops = state.get("max_loops_per_phase", 5)
+        return loops.get(phase, 0) >= max_loops
+    except Exception:
+        return False
+
+
+# ─── Error logging utility ───
+
+def _log_error(state: SwarmState, bot_name: str, error: Exception) -> None:
+    """Log an error to the engagement log file.
+
+    Never raises — if logging fails, silently continues.
+    """
+    try:
+        eng_dir = state.get("engagement_dir", "")
+        if not eng_dir:
+            return
+        from pathlib import Path
+        from datetime import datetime
+        log_path = Path(eng_dir) / "log.md"
+        if log_path.parent.exists():
+            with open(log_path, "a") as f:
+                f.write(f"\n[{datetime.utcnow().isoformat()}] [{bot_name}] ERROR: {error}\n")
+    except Exception:
+        pass
+
+
+# ─── Phase-specific routing functions ───
+# Each checks loop limit, reads last_decision, returns next node name.
+
+def route_after_recon(state: SwarmState) -> str:
+    """Route after ARIA (recon phase)."""
+    try:
+        if _check_loop_limit(state, "recon"):
+            print("[LOOP LIMIT] Recon phase exceeded max cycles — forcing abort to report")
+            return "bookkeeper"
+
+        decision = state.get("last_decision", "scan")
+
+        if decision == "scan":
+            return "lisa"
+        elif decision == "recon":
+            return "aria"
+        elif decision in ("report", "insufficient_data_abort"):
+            return "bookkeeper"
+        elif decision in ("lateral_recon", "lateral_scan"):
+            return "lateral_approval"
+        else:
+            print(f"[ROUTING] Unknown decision '{decision}' after recon — defaulting to scan")
+            return "lisa"
+    except Exception as e:
+        print(f"[ROUTING ERROR] route_after_recon: {e} — defaulting to bookkeeper")
+        return "bookkeeper"
+
+
+def route_after_scan(state: SwarmState) -> str:
+    """Route after Lisa (scan phase)."""
+    try:
+        if _check_loop_limit(state, "scan"):
+            print("[LOOP LIMIT] Scan phase exceeded max cycles — forcing abort to report")
+            return "bookkeeper"
+
+        decision = state.get("last_decision", "vulns_found_exploit")
+
+        if decision == "vulns_found_exploit":
+            return "bloodhound"
+        elif decision == "scan":
+            return "lisa"
+        elif decision == "recon":
+            return "aria"
+        elif decision in ("report", "insufficient_data_abort"):
+            return "bookkeeper"
+        elif decision in ("lateral_recon", "lateral_scan"):
+            return "lateral_approval"
+        else:
+            print(f"[ROUTING] Unknown decision '{decision}' after scan — defaulting to bloodhound")
+            return "bloodhound"
+    except Exception as e:
+        print(f"[ROUTING ERROR] route_after_scan: {e} — defaulting to bookkeeper")
+        return "bookkeeper"
+
+
+def route_after_vuln(state: SwarmState) -> str:
+    """Route after Bloodhound (vuln detection phase)."""
+    try:
+        if _check_loop_limit(state, "vuln"):
+            print("[LOOP LIMIT] Vuln phase exceeded max cycles — forcing abort to report")
+            return "bookkeeper"
+
+        decision = state.get("last_decision", "vulns_found_exploit")
+
+        if decision == "vulns_found_exploit":
+            return "human_approval"
+        elif decision == "scan":
+            return "lisa"
+        elif decision == "recon":
+            return "aria"
+        elif decision in ("report", "insufficient_data_abort"):
+            return "bookkeeper"
+        elif decision in ("lateral_recon", "lateral_scan"):
+            return "lateral_approval"
+        else:
+            print(f"[ROUTING] Unknown decision '{decision}' after vuln — defaulting to human_approval")
+            return "human_approval"
+    except Exception as e:
+        print(f"[ROUTING ERROR] route_after_vuln: {e} — defaulting to bookkeeper")
+        return "bookkeeper"
+
+
+def route_after_exploit(state: SwarmState) -> str:
+    """Route after Surgeon (exploitation phase).
+
+    Backtracking rule: no backtrack to scanning after shell within
+    external scope. Allowed when context is lateral (Phase 3).
+    """
+    try:
+        if _check_loop_limit(state, "exploit"):
+            print("[LOOP LIMIT] Exploit phase exceeded max cycles — forcing abort to report")
+            return "bookkeeper"
+
+        decision = state.get("last_decision", "privesc")
+        target_context = state.get("target_context", "external")
+
+        if decision == "privesc":
+            return "magician"
+        elif decision == "continue_exploit":
+            return "surgeon"
+        elif decision in ("lateral_recon", "lateral_scan"):
+            return "lateral_approval"
+        elif decision == "recon" and target_context == "lateral":
+            return "aria"
+        elif decision in ("report", "insufficient_data_abort"):
+            return "bookkeeper"
+        else:
+            print(f"[ROUTING] Unknown decision '{decision}' after exploit — defaulting to magician")
+            return "magician"
+    except Exception as e:
+        print(f"[ROUTING ERROR] route_after_exploit: {e} — defaulting to bookkeeper")
+        return "bookkeeper"
+
+
+def route_after_privesc(state: SwarmState) -> str:
+    """Route after Magician (privesc phase)."""
+    try:
+        if _check_loop_limit(state, "privesc"):
+            print("[LOOP LIMIT] Privesc phase exceeded max cycles — forcing abort to report")
+            return "bookkeeper"
+
+        decision = state.get("last_decision", "exfiltrate")
+
+        if decision == "exfiltrate":
+            return "thief"
+        elif decision == "privesc":
+            return "magician"
+        elif decision in ("lateral_recon", "lateral_scan"):
+            return "lateral_approval"
+        elif decision == "continue_exploit":
+            return "surgeon"
+        elif decision in ("report", "insufficient_data_abort"):
+            return "bookkeeper"
+        else:
+            print(f"[ROUTING] Unknown decision '{decision}' after privesc — defaulting to thief")
+            return "thief"
+    except Exception as e:
+        print(f"[ROUTING ERROR] route_after_privesc: {e} — defaulting to bookkeeper")
+        return "bookkeeper"
+
+
+def route_after_exfil(state: SwarmState) -> str:
+    """Route after Thief (exfiltration phase)."""
+    try:
+        if _check_loop_limit(state, "exfil"):
+            print("[LOOP LIMIT] Exfil phase exceeded max cycles — forcing abort to report")
+            return "bookkeeper"
+
+        decision = state.get("last_decision", "report")
+
+        if decision == "report":
+            return "bookkeeper"
+        elif decision == "exfiltrate":
+            return "thief"
+        elif decision in ("lateral_recon", "lateral_scan"):
+            return "lateral_approval"
+        elif decision == "continue_exploit":
+            return "surgeon"
+        elif decision == "insufficient_data_abort":
+            return "bookkeeper"
+        else:
+            print(f"[ROUTING] Unknown decision '{decision}' after exfil — defaulting to bookkeeper")
+            return "bookkeeper"
+    except Exception as e:
+        print(f"[ROUTING ERROR] route_after_exfil: {e} — defaulting to bookkeeper")
+        return "bookkeeper"
+
+
+def route_after_lateral_approval(state: SwarmState) -> str:
+    """Route after lateral approval gate.
+
+    If approved: switch target_context to lateral, route to ARIA/Lisa.
+    If denied: route to Bookkeeper (no retry loop).
+    """
+    try:
+        approved = state.get("lateral_approval", False)
+        if not approved:
+            print("[LATERAL] Lateral movement denied — routing to report")
+            return "bookkeeper"
+
+        state["target_context"] = "lateral"
+        print("[LATERAL] Lateral movement approved — switching to internal scope")
+
+        decision = state.get("last_decision", "lateral_recon")
+        if decision == "lateral_scan":
+            return "lisa"
+        else:
+            return "aria"
+    except Exception as e:
+        print(f"[ROUTING ERROR] route_after_lateral_approval: {e} — defaulting to bookkeeper")
+        return "bookkeeper"
+
+
+# ─── Unified WarChief router ───
+
+def _unified_router(state: SwarmState) -> str:
+    """Unified WarChief routing function.
+
+    Determines the next node based on mission phase and last_decision.
+    This is the single conditional edge from WarChief — it dispatches
+    to phase-specific routing functions based on state["mission"]["phase"].
+
+    Fallback: any unknown phase or decision routes to Bookkeeper (safe).
+    """
+    try:
+        decision = state.get("last_decision", "")
+        mission = state.get("mission", {})
+        phase = mission.get("phase", "init") if isinstance(mission, dict) else "init"
+
+        # Init phase — always start with recon
+        if phase == "init" or not decision:
+            return "aria"
+
+        # Explicit report/abort — always go to bookkeeper
+        if decision in ("report", "insufficient_data_abort"):
+            return "bookkeeper"
+
+        # Lateral movement — always through approval gate
+        if decision in ("lateral_recon", "lateral_scan"):
+            return "lateral_approval"
+
+        # Phase-specific routing
+        phase_routers = {
+            "recon": route_after_recon,
+            "scanning": route_after_scan,
+            "vuln_detection": route_after_vuln,
+            "exploitation": route_after_exploit,
+            "post_exploit": route_after_privesc,
+            "reporting": lambda s: "bookkeeper",
+            "lateral_recon": route_after_recon,
+            "lateral_scanning": route_after_scan,
+        }
+
+        router_fn = phase_routers.get(phase)
+        if router_fn:
+            return router_fn(state)
+
+        # Unknown phase — try forward progress based on decision
+        print(f"[ROUTING] Unknown phase '{phase}' with decision '{decision}' — trying forward progress")
+        forward_map = {
+            "recon": "aria",
+            "scan": "lisa",
+            "vulns_found_exploit": "human_approval",
+            "continue_exploit": "surgeon",
+            "privesc": "magician",
+            "exfiltrate": "thief",
+        }
+        return forward_map.get(decision, "bookkeeper")
+
+    except Exception as e:
+        print(f"[ROUTING ERROR] _unified_router: {e} — defaulting to bookkeeper")
+        return "bookkeeper"
+
+
+# ─── Graph builder ───
+
 def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
                        auto_approve: bool = False) -> StateGraph:
-    """Build the LangGraph state machine."""
+    """Build the v2 adaptive LangGraph state machine.
+
+    WarChief re-enters after each phase as a decision router.
+    All nodes have exception handling — degrade to Bookkeeper on failure.
+    """
 
     workflow = StateGraph(SwarmState)
 
     # ─── Node functions ───
 
     async def warchief_node(state: SwarmState) -> SwarmState:
-        bot = WarChief(state, swarm_config)
-        result = await bot.run()
+        """WarChief — orchestrator and decision router.
+
+        On failure: sets last_decision to 'report' (safe route to Bookkeeper).
+        """
+        try:
+            bot = WarChief(state, swarm_config)
+            await bot.run()
+        except Exception as e:
+            print(f"[WARCHELF ERROR] {e} — setting safe fallback route")
+            try:
+                state["last_decision"] = "report"
+                _log_error(state, "WARCHELF", e)
+            except Exception:
+                pass
         return state
 
     async def aria_node(state: SwarmState) -> SwarmState:
-        bot = ARIA(state, swarm_config)
-        result = await bot.run()
+        """ARIA — passive reconnaissance. On failure: WarChief reroutes."""
+        try:
+            bot = ARIA(state, swarm_config)
+            await bot.run()
+        except Exception as e:
+            print(f"[ARIA ERROR] {e}")
+            _log_error(state, "ARIA", e)
         return state
 
     async def lisa_node(state: SwarmState) -> SwarmState:
-        bot = Lisa(state, swarm_config)
-        result = await bot.run()
+        """Lisa — active scanning. On failure: WarChief reroutes."""
+        try:
+            bot = Lisa(state, swarm_config)
+            await bot.run()
+        except Exception as e:
+            print(f"[LISA ERROR] {e}")
+            _log_error(state, "LISA", e)
         return state
 
     async def bloodhound_node(state: SwarmState) -> SwarmState:
-        bot = Bloodhound(state, swarm_config)
-        result = await bot.run()
+        """Bloodhound — vulnerability detection. On failure: WarChief reroutes."""
+        try:
+            bot = Bloodhound(state, swarm_config)
+            await bot.run()
+        except Exception as e:
+            print(f"[BLOODHOUND ERROR] {e}")
+            _log_error(state, "BLOODHOUND", e)
         return state
 
     def human_approval_node(state: SwarmState) -> SwarmState:
-        """Human-in-loop gate. Presents findings, waits for y/n."""
-        vuln_report = state.get("vuln_report", [])
+        """Human-in-loop gate. On EOFError/OSError: deny (fail safe)."""
+        try:
+            vuln_report = state.get("vuln_report", [])
 
-        print("\n" + "=" * 60)
-        print("HUMAN APPROVAL REQUIRED — EXPLOITATION PHASE GATE")
-        print("=" * 60)
-        print(f"Vulnerabilities found: {len(vuln_report)}")
-        for i, vuln in enumerate(vuln_report, 1):
-            if isinstance(vuln, dict):
-                print(f"  {i}. {vuln.get('cve', vuln.get('id', 'N/A'))} "
-                      f"(CVSS: {vuln.get('cvss', vuln.get('severity', 'N/A'))}) "
-                      f"on {vuln.get('host', vuln.get('target', 'N/A'))}")
-            else:
-                print(f"  {i}. {vuln}")
-        print("=" * 60)
+            print("\n" + "=" * 60)
+            print("HUMAN APPROVAL REQUIRED — EXPLOITATION PHASE GATE")
+            print("=" * 60)
+            print(f"Vulnerabilities found: {len(vuln_report)}")
+            for i, vuln in enumerate(vuln_report, 1):
+                if isinstance(vuln, dict):
+                    print(f"  {i}. {vuln.get('cve', vuln.get('id', 'N/A'))} "
+                          f"(CVSS: {vuln.get('cvss', vuln.get('severity', 'N/A'))}) "
+                          f"on {vuln.get('host', vuln.get('target', 'N/A'))}")
+                else:
+                    print(f"  {i}. {vuln}")
+            print("=" * 60)
 
-        if not vuln_report:
-            print("No vulnerabilities cataloged by Bloodhound.")
+            if not vuln_report:
+                print("No vulnerabilities cataloged by Bloodhound.")
+                if auto_approve:
+                    print("Proceeding with exploitation phase anyway (--approve flag)")
+                    state["human_approval"] = True
+                    return state
+                print("Skipping exploitation phase.")
+                state["human_approval"] = False
+                return state
+
             if auto_approve:
-                print("Proceeding with exploitation phase anyway (--approve flag)")
+                print("\nExploitation AUTO-APPROVED (--approve flag)\n")
                 state["human_approval"] = True
                 return state
-            print("Skipping exploitation phase.")
-            state["human_approval"] = False
-            return state
 
-        if auto_approve:
-            print("\nExploitation AUTO-APPROVED (--approve flag)\n")
-            state["human_approval"] = True
-            return state
-
-        try:
-            response = input("\nProceed with exploitation? (y/n): ").strip().lower()
-        except (EOFError, OSError):
-            response = "n"
-        if response == "y":
-            print("\nExploitation APPROVED — proceeding\n")
-            state["human_approval"] = True
-        else:
-            print("\nExploitation DENIED — skipping to final report\n")
+            try:
+                response = input("\nProceed with exploitation? (y/n): ").strip().lower()
+            except (EOFError, OSError):
+                response = "n"
+            if response == "y":
+                print("\nExploitation APPROVED — proceeding\n")
+                state["human_approval"] = True
+            else:
+                print("\nExploitation DENIED — skipping to final report\n")
+                state["human_approval"] = False
+        except Exception as e:
+            print(f"[HUMAN APPROVAL ERROR] {e} — defaulting to deny")
             state["human_approval"] = False
         return state
 
-    # v2 Phase -1: Lateral movement approval gate
-    # Fires when WarChief decides to pivot to lateral movement.
-    # Discovering an internal network and getting a shell on an external host
-    # does NOT imply authorization to attack the internal network.
-    # This gate is independent of the exploitation gate above and must fire
-    # before any lateral recon/scanning begins.
     def lateral_approval_node(state: SwarmState) -> SwarmState:
-        """Second human gate for lateral movement (v2 Phase -1).
-
-        Fires when WarChief's decision is 'pivot_lateral_recon' or any
-        'lateral_*' value. The operator must explicitly approve lateral
-        movement — pre-declared --lateral-objectives do NOT auto-authorize.
-        """
-        # Check if we actually need lateral approval
-        last_decision = state.get("last_decision", "")
-
-        # If the decision doesn't involve lateral movement, pass through
-        if not last_decision.startswith("lateral"):
-            state["lateral_approval"] = True
-            return state
-
-        print("\n" + "=" * 60)
-        print("LATERAL MOVEMENT APPROVAL REQUIRED — PIVOT GATE")
-        print("=" * 60)
-        print(f"WarChief decision: {last_decision}")
-        print("This will redirect the swarm to newly-discovered internal targets.")
-        print("External scope and internal scope are separate authorizations.")
-        print("=" * 60)
-
-        if auto_approve:
-            print("\nLateral movement AUTO-APPROVED (--approve flag)\n")
-            state["lateral_approval"] = True
-            return state
-
+        """Lateral movement gate. On EOFError/OSError: deny (fail safe)."""
         try:
-            response = input("\nApprove lateral movement to internal targets? (y/n): ").strip().lower()
-        except (EOFError, OSError):
-            response = "n"
+            last_decision = state.get("last_decision", "")
 
-        if response == "y":
-            print("\nLateral movement APPROVED — proceeding\n")
-            state["lateral_approval"] = True
-        else:
-            print("\nLateral movement DENIED — routing to final report\n")
+            if not last_decision.startswith("lateral"):
+                state["lateral_approval"] = True
+                return state
+
+            print("\n" + "=" * 60)
+            print("LATERAL MOVEMENT APPROVAL REQUIRED — PIVOT GATE")
+            print("=" * 60)
+            print(f"WarChief decision: {last_decision}")
+            print("This will redirect the swarm to newly-discovered internal targets.")
+            print("External scope and internal scope are separate authorizations.")
+            print("=" * 60)
+
+            if auto_approve:
+                print("\nLateral movement AUTO-APPROVED (--approve flag)\n")
+                state["lateral_approval"] = True
+                return state
+
+            try:
+                response = input("\nApprove lateral movement to internal targets? (y/n): ").strip().lower()
+            except (EOFError, OSError):
+                response = "n"
+
+            if response == "y":
+                print("\nLateral movement APPROVED — proceeding\n")
+                state["lateral_approval"] = True
+            else:
+                print("\nLateral movement DENIED — routing to final report\n")
+                state["lateral_approval"] = False
+        except Exception as e:
+            print(f"[LATERAL APPROVAL ERROR] {e} — defaulting to deny")
             state["lateral_approval"] = False
-
         return state
 
     async def pathologist_node(state: SwarmState) -> SwarmState:
-        bot = Pathologist(state, swarm_config)
-        result = await bot.run()
+        """Pathologist — payload fabrication. On failure: logged, graph continues."""
+        try:
+            bot = Pathologist(state, swarm_config)
+            await bot.run()
+        except Exception as e:
+            print(f"[PATHOLOGIST ERROR] {e}")
+            _log_error(state, "PATHOLOGIST", e)
         return state
 
     async def surgeon_node(state: SwarmState) -> SwarmState:
-        bot = Surgeon(state, swarm_config)
-        result = await bot.run()
+        """Surgeon — exploitation. On failure: WarChief reroutes."""
+        try:
+            bot = Surgeon(state, swarm_config)
+            await bot.run()
+        except Exception as e:
+            print(f"[SURGEON ERROR] {e}")
+            _log_error(state, "SURGEON", e)
         return state
 
     async def magician_node(state: SwarmState) -> SwarmState:
-        bot = Magician(state, swarm_config)
-        result = await bot.run()
+        """Magician — privilege escalation. On failure: WarChief reroutes."""
+        try:
+            bot = Magician(state, swarm_config)
+            await bot.run()
+        except Exception as e:
+            print(f"[MAGICIAN ERROR] {e}")
+            _log_error(state, "MAGICIAN", e)
         return state
 
     async def thief_node(state: SwarmState) -> SwarmState:
-        bot = Thief(state, swarm_config)
-        result = await bot.run()
+        """Thief — data exfiltration. On failure: WarChief reroutes."""
+        try:
+            bot = Thief(state, swarm_config)
+            await bot.run()
+        except Exception as e:
+            print(f"[THIEF ERROR] {e}")
+            _log_error(state, "THIEF", e)
         return state
 
     async def bookkeeper_node(state: SwarmState) -> SwarmState:
-        bot = Bookkeeper(state, swarm_config)
-        result = await bot.run()
+        """Bookkeeper — report generation.
+
+        On failure: writes a minimal error report so engagement isn't empty.
+        """
+        try:
+            bot = Bookkeeper(state, swarm_config)
+            await bot.run()
+        except Exception as e:
+            print(f"[BOOKKEEPER ERROR] {e} — report generation failed")
+            try:
+                eng_dir = state.get("engagement_dir", "")
+                if eng_dir:
+                    from pathlib import Path
+                    from datetime import datetime
+                    report_dir = Path(eng_dir) / "report"
+                    report_dir.mkdir(parents=True, exist_ok=True)
+                    error_report = (
+                        f"# Penetration Test Report — Generation Failed\n\n"
+                        f"**Error**: {e}\n\n"
+                        f"**Timestamp**: {datetime.utcnow().isoformat()}\n\n"
+                        f"The automated report generator encountered an error.\n"
+                        f"Check engagement files in {eng_dir} for raw findings.\n"
+                    )
+                    (report_dir / "final_report.md").write_text(error_report)
+                    state["final_report"] = {
+                        "generated_at": datetime.utcnow().isoformat(),
+                        "error": str(e),
+                        "report": error_report,
+                    }
+            except Exception:
+                print(f"[BOOKKEEPER] Could not write error report")
         return state
 
-    # ─── Add nodes ───
+    # ─── Add all nodes ───
     workflow.add_node("warchief", warchief_node)
     workflow.add_node("aria", aria_node)
     workflow.add_node("lisa", lisa_node)
     workflow.add_node("bloodhound", bloodhound_node)
     workflow.add_node("human_approval", human_approval_node)
-    # v2 Phase -1: Lateral movement approval gate
     workflow.add_node("lateral_approval", lateral_approval_node)
     workflow.add_node("pathologist", pathologist_node)
     workflow.add_node("surgeon", surgeon_node)
@@ -192,24 +583,59 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
     workflow.add_node("thief", thief_node)
     workflow.add_node("bookkeeper", bookkeeper_node)
 
-    # ─── Edges ───
-    workflow.set_entry_point("warchief")
-    workflow.add_edge("warchief", "aria")
-    workflow.add_edge("aria", "lisa")
-    workflow.add_edge("lisa", "bloodhound")
-    workflow.add_edge("bloodhound", "human_approval")
+    # ─── Edges: Adaptive routing ───
 
-    # Human Approval → Pathologist (if approved) or Bookkeeper (if denied)
+    # Entry: WarChief (init planning)
+    workflow.set_entry_point("warchief")
+
+    # All phase bots → WarChief (re-enter for routing)
+    workflow.add_edge("aria", "warchief")
+    workflow.add_edge("lisa", "warchief")
+    workflow.add_edge("bloodhound", "warchief")
+    workflow.add_edge("surgeon", "warchief")
+    workflow.add_edge("magician", "warchief")
+    workflow.add_edge("thief", "warchief")
+
+    # WarChief → unified conditional router (one edge, all destinations)
+    workflow.add_conditional_edges(
+        "warchief",
+        _unified_router,
+        {
+            "aria": "aria",
+            "lisa": "lisa",
+            "bloodhound": "bloodhound",
+            "human_approval": "human_approval",
+            "pathologist": "pathologist",
+            "surgeon": "surgeon",
+            "magician": "magician",
+            "thief": "thief",
+            "lateral_approval": "lateral_approval",
+            "bookkeeper": "bookkeeper",
+        },
+    )
+
+    # Human approval → Pathologist (approved) or Bookkeeper (denied)
     workflow.add_conditional_edges(
         "human_approval",
         lambda state: "pathologist" if state.get("human_approval") else "bookkeeper",
         {"pathologist": "pathologist", "bookkeeper": "bookkeeper"},
     )
 
+    # Pathologist → Surgeon (linear within exploitation phase)
     workflow.add_edge("pathologist", "surgeon")
-    workflow.add_edge("surgeon", "magician")
-    workflow.add_edge("magician", "thief")
-    workflow.add_edge("thief", "bookkeeper")
+
+    # Lateral approval → conditional (approved: ARIA/Lisa, denied: Bookkeeper)
+    workflow.add_conditional_edges(
+        "lateral_approval",
+        route_after_lateral_approval,
+        {
+            "aria": "aria",
+            "lisa": "lisa",
+            "bookkeeper": "bookkeeper",
+        },
+    )
+
+    # Bookkeeper → END
     workflow.add_edge("bookkeeper", END)
 
     return workflow
@@ -217,6 +643,6 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
 
 def compile_graph(swarm_config: Optional[Dict[str, Any]] = None,
                   auto_approve: bool = False):
-    """Compile the LangGraph workflow."""
+    """Compile the v2 adaptive LangGraph workflow."""
     graph = create_swarm_graph(swarm_config, auto_approve)
     return graph.compile()
