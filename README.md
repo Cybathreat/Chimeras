@@ -1,6 +1,6 @@
 # Chimeras
 
-**Autonomous AI Penetration Testing Swarm**
+**Autonomous AI Pentesting Swarm**
 
 9 AI agents. Each one reasons for itself. Each one picks its own tools. Each one executes real Kali Linux commands against real targets. No hardcoded logic. No mock data. The LLM is the brain.
 
