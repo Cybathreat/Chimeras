@@ -39,7 +39,10 @@ class Bookkeeper(BaseBot):
 
     def _build_system_prompt(self) -> str:
         """Override — Bookkeeper doesn't run tools, it reads files and generates reports."""
-        return f"""You are {self.bot_name}, {self.role_description}.
+        soul_block = ""
+        if self._soul:
+            soul_block = f"## Your Soul\n\n{self._soul}\n\n---\n\n"
+        return f"""{soul_block}You are {self.bot_name}, {self.role_description}.
 
 ## Your Scope
 {self.scope_description}

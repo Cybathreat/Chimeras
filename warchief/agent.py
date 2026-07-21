@@ -214,7 +214,11 @@ class WarChief(BaseBot):
             "Do NOT route aggressively if you're unsure. Uncertainty = gather more data.\n"
         )
 
-        return f"""You are {self.bot_name}, {self.role_description}.
+        soul_block = ""
+        if self._soul:
+            soul_block = f"## Your Soul\n\n{self._soul}\n\n---\n\n"
+
+        return f"""{soul_block}You are {self.bot_name}, {self.role_description}.
 
 ## Your Scope
 {self.scope_description}

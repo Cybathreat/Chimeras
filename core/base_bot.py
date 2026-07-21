@@ -39,6 +39,7 @@ class BaseBot(ABC):
     def __init__(self, state: SwarmState, swarm_config: Optional[Dict[str, Any]] = None):
         self.state = state
         self.swarm_config = swarm_config or {}
+        self._soul = self._load_soul()
         self.llm_router = self._init_router()
         # v2: Pass mission scope and bot name to ToolExecutor for target validation
         mission = state.get("mission", {})
@@ -53,6 +54,28 @@ class BaseBot(ABC):
         )
         self.engagement_dir: Optional[Path] = None
         self._resolve_engagement_dir()
+
+    def _load_soul(self) -> str:
+        """Load soul.md from the bot's directory. Returns empty string if not found.
+
+        soul.md defines the bot's identity, personality, behavioral constraints,
+        and communication style. It is injected at the top of the system prompt,
+        before role/scope/hint instructions. This externalizes bot identity from
+        code — operators can tune behavior without editing agent.py.
+        """
+        try:
+            # Find the bot's directory: look for soul.md relative to the agent module
+            import inspect
+            cls = type(self)
+            module = inspect.getmodule(cls)
+            if module and hasattr(module, "__file__") and module.__file__:
+                bot_dir = Path(module.__file__).parent
+                soul_path = bot_dir / "soul.md"
+                if soul_path.exists():
+                    return soul_path.read_text().strip()
+        except Exception:
+            pass
+        return ""
 
     def _init_router(self) -> LLMRouter:
         return LLMRouter.from_config(self.bot_name, self.swarm_config)
@@ -333,7 +356,12 @@ class BaseBot(ABC):
         return "\n\n".join(parts)
 
     def _build_system_prompt(self) -> str:
-        """Build the bot's system prompt with scope enforcement."""
+        """Build the bot's system prompt with soul.md identity and scope enforcement.
+
+        v2: soul.md is loaded at __init__ and prepended to the system prompt.
+        Bots that override _build_system_prompt() call super() first, so the
+        soul is always injected before any bot-specific additions.
+        """
         category = ScopeEnforcer.get_bot_category(self.bot_name)
         allowed_tools = sorted(ScopeEnforcer.get_allowed_tools(self.bot_name))
         installed = ScopeEnforcer._discover_installed_tools()
@@ -361,7 +389,11 @@ class BaseBot(ABC):
         }
         hint = hints.get(self.bot_name, "")
 
-        return f"""You are {self.bot_name}, {self.role_description}.
+        soul_block = ""
+        if self._soul:
+            soul_block = f"## Your Soul\n\n{self._soul}\n\n---\n\n"
+
+        return f"""{soul_block}You are {self.bot_name}, {self.role_description}.
 Scope: {self.scope_description}
 Tool Category: {category}
 Available Tools: {available_str}
