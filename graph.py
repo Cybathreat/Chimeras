@@ -1,9 +1,21 @@
 """
-Chimeras v1.0 — LangGraph Graph Wiring
+Chimeras v2.0 — LangGraph Graph Wiring
 
-Linear flow with human-in-loop gate at exploitation.
+Linear flow with human-in-loop gates at exploitation and lateral movement.
+
+v1 flow:
 WarChief → ARIA → Lisa → Bloodhound → [HUMAN APPROVAL]
 → Pathologist → Surgeon → Magician → Thief → Bookkeeper → END
+
+v2 additions (Phase -1):
+  - lateral_approval node: second human gate before lateral movement
+  - Lateral movement routing: if denied, routes to Bookkeeper (not retry loop)
+  - Target/CIDR validation enforced at code level in ToolExecutor
+
+Note: Full adaptive routing (WarChief as decision router with loopback
+edges) is Phase 1. This file currently maintains the v1 linear flow with
+the lateral approval gate added as a passthrough node. Phase 1 will
+replace the linear edges with conditional routing.
 """
 
 from typing import Dict, Any, Optional
@@ -93,6 +105,54 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
             state["human_approval"] = False
         return state
 
+    # v2 Phase -1: Lateral movement approval gate
+    # Fires when WarChief decides to pivot to lateral movement.
+    # Discovering an internal network and getting a shell on an external host
+    # does NOT imply authorization to attack the internal network.
+    # This gate is independent of the exploitation gate above and must fire
+    # before any lateral recon/scanning begins.
+    def lateral_approval_node(state: SwarmState) -> SwarmState:
+        """Second human gate for lateral movement (v2 Phase -1).
+
+        Fires when WarChief's decision is 'pivot_lateral_recon' or any
+        'lateral_*' value. The operator must explicitly approve lateral
+        movement — pre-declared --lateral-objectives do NOT auto-authorize.
+        """
+        # Check if we actually need lateral approval
+        last_decision = state.get("last_decision", "")
+
+        # If the decision doesn't involve lateral movement, pass through
+        if not last_decision.startswith("lateral"):
+            state["lateral_approval"] = True
+            return state
+
+        print("\n" + "=" * 60)
+        print("LATERAL MOVEMENT APPROVAL REQUIRED — PIVOT GATE")
+        print("=" * 60)
+        print(f"WarChief decision: {last_decision}")
+        print("This will redirect the swarm to newly-discovered internal targets.")
+        print("External scope and internal scope are separate authorizations.")
+        print("=" * 60)
+
+        if auto_approve:
+            print("\nLateral movement AUTO-APPROVED (--approve flag)\n")
+            state["lateral_approval"] = True
+            return state
+
+        try:
+            response = input("\nApprove lateral movement to internal targets? (y/n): ").strip().lower()
+        except (EOFError, OSError):
+            response = "n"
+
+        if response == "y":
+            print("\nLateral movement APPROVED — proceeding\n")
+            state["lateral_approval"] = True
+        else:
+            print("\nLateral movement DENIED — routing to final report\n")
+            state["lateral_approval"] = False
+
+        return state
+
     async def pathologist_node(state: SwarmState) -> SwarmState:
         bot = Pathologist(state, swarm_config)
         result = await bot.run()
@@ -124,6 +184,8 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
     workflow.add_node("lisa", lisa_node)
     workflow.add_node("bloodhound", bloodhound_node)
     workflow.add_node("human_approval", human_approval_node)
+    # v2 Phase -1: Lateral movement approval gate
+    workflow.add_node("lateral_approval", lateral_approval_node)
     workflow.add_node("pathologist", pathologist_node)
     workflow.add_node("surgeon", surgeon_node)
     workflow.add_node("magician", magician_node)

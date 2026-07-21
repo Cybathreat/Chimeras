@@ -41,7 +41,17 @@ class BaseBot(ABC):
         self.state = state
         self.swarm_config = swarm_config or {}
         self.llm_router = self._init_router()
-        self.executor = ToolExecutor(timeout=180, workdir="/tmp")
+        # v2: Pass mission scope and bot name to ToolExecutor for target validation
+        mission = state.get("mission", {})
+        mission_scope = mission.get("scope", "")
+        internal_scope = state.get("internal_scope", "")
+        self.executor = ToolExecutor(
+            timeout=180,
+            workdir="/tmp",
+            bot_name=self.bot_name,
+            mission_scope=mission_scope,
+            internal_scope=internal_scope,
+        )
         self.engagement_dir: Optional[Path] = None
         self._resolve_engagement_dir()
 
@@ -163,9 +173,19 @@ class BaseBot(ABC):
         """
         Execute a Kali tool. Scope-enforced. Real subprocess.
         Returns tool result dict.
+
+        v2: Scope enforcement now includes shell injection check, tool
+        category check, and target/CIDR validation — all at code level.
         """
-        # Enforce scope
-        allowed, reason = ScopeEnforcer.check(self.bot_name, command)
+        # v2: Full scope enforcement with target validation
+        mission = self.state.get("mission", {})
+        mission_scope = mission.get("scope", "")
+        internal_scope = self.state.get("internal_scope", "")
+        allowed, reason = ScopeEnforcer.check(
+            self.bot_name, command,
+            mission_scope=mission_scope or None,
+            internal_scope=internal_scope or None,
+        )
         if not allowed:
             self._log(f"SCOPE BLOCKED: {reason}", "SCOPE")
             return {
@@ -338,10 +358,38 @@ Respond ONLY with JSON:
         try:
             decision = self._parse_json_response(llm_response)
         except ValueError as e:
-            self._log(f"LLM response unparseable: {e}", "ERROR")
-            self._append_log(f"ERROR: LLM response unparseable. Bot cannot continue.")
-            self._write_bot_file(f"# {self.bot_name.upper()} — FAILED\n\nLLM response could not be parsed.\n")
-            return {"reasoning": {"needed": False, "error": str(e)}, "executed": False, "failed": True}
+            # v2 Phase -1: Safe fallback for malformed LLM output.
+            # In v1, this crashed the bot with "FAILED" — acceptable when each
+            # bot runs once. In v2, WarChief is invoked at 5-6 decision points
+            # and every stage depends on it succeeding. A crash here is a
+            # single point of failure for the entire engagement.
+            #
+            # Fallback: write a conservative decision that skips the bot and
+            # lets the pipeline continue. This is safer than crashing because:
+            #   - The bot's file gets a valid (if empty) entry
+            #   - Downstream bots see the bot ran (even if it found nothing)
+            #   - The graph doesn't stall waiting for a bot that died
+            #   - WarChief (if this IS WarChief) produces a default "report" route
+            self._log(f"LLM response unparseable: {e} — using safe fallback", "ERROR")
+            self._append_log(f"WARNING: LLM response unparseable. Using safe fallback (conservative skip).")
+            self._write_bot_file(
+                f"# {self.bot_name.upper()} — SAFE FALLBACK\n\n"
+                f"LLM response could not be parsed.\n"
+                f"Fallback: conservative skip (bot did not execute).\n"
+                f"Error: {e}\n"
+            )
+            # Build a conservative fallback decision
+            fallback_decision = {
+                "needed": False,
+                "strategy": "safe_fallback",
+                "confidence": 0.0,
+                "reasoning": f"LLM response unparseable — conservative skip. Error: {e}",
+                "commands": [],
+                "skip_reason": f"LLM parse failure — safe fallback activated",
+            }
+            self.state.setdefault("reasoning_reports", {})[self.bot_name] = fallback_decision
+            return {"reasoning": fallback_decision, "executed": False, "failed": True,
+                    "fallback": True}
 
         needed = decision.get("needed", True)
         strategy = decision.get("strategy", "unknown")

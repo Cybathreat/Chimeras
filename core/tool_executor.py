@@ -1,30 +1,47 @@
 """
-Chimeras v1.0 — Tool Executor
+Chimeras v2.0 — Tool Executor
 
 Executes Kali Linux tools via subprocess. Captures stdout/stderr.
 No mock data. Real tools, real output.
+
+v2 additions (Phase -1):
+  - Shell injection validation integrated with ScopeEnforcer.check()
+  - Mission scope passed through to target validation
+  - Internal scope (lateral) support for post-approval pivots
 """
 
 import subprocess
 import shlex
 import time
+import re
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 
+from core.scope import ScopeEnforcer, ScopeViolation, TargetScopeViolation, ShellInjectionViolation
+
 
 class ToolExecutor:
-    """Executes shell commands (Kali tools) and captures output."""
+    """Executes shell commands (Kali tools) and captures output.
 
-    def __init__(self, timeout: int = 120, workdir: Optional[str] = None):
+    v2: Scope enforcement now includes target validation and shell
+    metacharacter injection checks. The executor receives the mission
+    scope and bot name so it can validate targets before execution.
+    """
+
+    def __init__(self, timeout: int = 120, workdir: Optional[str] = None,
+                 bot_name: str = "", mission_scope: str = "",
+                 internal_scope: str = ""):
         self.timeout = timeout
         self.workdir = workdir or "/tmp"
+        self.bot_name = bot_name
+        self.mission_scope = mission_scope
+        self.internal_scope = internal_scope
 
     @staticmethod
     def _sanitize_command(command: str) -> str:
         """Strip output-file flags that cause tools to fail when paths don't exist.
         The executor captures stdout directly, so -oN/-oX/-oG/-oS are redundant.
         Also caps nikto maxtime to 120s for demo reliability."""
-        import re
         # nmap: -oN /path, -oX /path, -oG /path, -oS /path, -oA basename
         command = re.sub(r'\s+-o[NXGSA]\s+\S+', '', command)
         # nikto: -output /path
@@ -48,8 +65,60 @@ class ToolExecutor:
                 "duration_sec": float,
                 "success": bool
             }
+
+        v2: Before execution, runs the full ScopeEnforcer.check() which
+        includes:
+        1. Shell metacharacter injection check
+        2. Tool category check (v1)
+        3. Target/CIDR validation (v2)
+
+        If any check fails, the command is NOT executed and the result
+        contains an error message with scope_blocked=True.
         """
         t = timeout or self.timeout
+
+        # v2: Full scope enforcement — injection, category, target
+        if self.bot_name:
+            try:
+                ScopeEnforcer.enforce(
+                    self.bot_name, command,
+                    mission_scope=self.mission_scope or None,
+                    internal_scope=self.internal_scope or None,
+                )
+            except ShellInjectionViolation as e:
+                return {
+                    "command": command,
+                    "exit_code": -2,
+                    "stdout": "",
+                    "stderr": str(e),
+                    "duration_sec": 0,
+                    "success": False,
+                    "scope_blocked": True,
+                    "violation_type": "shell_injection",
+                }
+            except TargetScopeViolation as e:
+                return {
+                    "command": command,
+                    "exit_code": -2,
+                    "stdout": "",
+                    "stderr": str(e),
+                    "duration_sec": 0,
+                    "success": False,
+                    "scope_blocked": True,
+                    "violation_type": "target_out_of_scope",
+                }
+            except ScopeViolation as e:
+                return {
+                    "command": command,
+                    "exit_code": -2,
+                    "stdout": "",
+                    "stderr": str(e),
+                    "duration_sec": 0,
+                    "success": False,
+                    "scope_blocked": True,
+                    "violation_type": "tool_category",
+                }
+
         command = self._sanitize_command(command)
         start = time.time()
 
