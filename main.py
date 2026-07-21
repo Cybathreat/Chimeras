@@ -52,6 +52,10 @@ async def run_operation(mission_dir: Path, swarm_config: dict, auto_approve: boo
     target_scope = parse_scope_from_mission(mission_path)
 
     # Initialize state — v2 fields included
+    # v2 Phase 3: Extract internal scope from config for lateral movement
+    internal_scope = swarm_config.get("internal_scope", "")
+    lateral_objectives = swarm_config.get("lateral_objectives", "")
+
     state = SwarmState(
         mission={
             "name": swarm_config.get("mission_name", "unnamed"),
@@ -59,6 +63,7 @@ async def run_operation(mission_dir: Path, swarm_config: dict, auto_approve: boo
             "created": swarm_config.get("created"),
             "scope": target_scope,
             "target": target_scope.split("/")[0] if target_scope else "",
+            "lateral_objectives": lateral_objectives,
         },
         swarm_config=swarm_config,
         human_approval=False,
@@ -83,6 +88,11 @@ async def run_operation(mission_dir: Path, swarm_config: dict, auto_approve: boo
         scope_exhausted=False,          # Set when recon finds zero new targets
         confidence_threshold=0.6,       # Minimum confidence for routing
     )
+
+    # v2 Phase 3: Store internal scope in state for ToolExecutor target validation
+    # ToolExecutor reads this when lateral_approval is granted
+    if internal_scope:
+        state["internal_scope"] = internal_scope
 
     # Compile graph
     app = compile_graph(swarm_config, auto_approve)

@@ -143,3 +143,8 @@ class SwarmState(TypedDict, total=False):
     # Below this, defaults to safe conservative route.
     # Default: 0.6
     confidence_threshold: float
+
+    # ─── v2 Phase 3: Lateral movement scope ───
+    # Internal network scope (CIDR/hostname) approved via lateral_approval gate.
+    # ToolExecutor uses this for target validation when target_context="lateral".
+    internal_scope: str

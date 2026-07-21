@@ -66,7 +66,9 @@ class ConfigManager:
         self.soul_path = self.mission_dir / "soul.md"
 
     def setup_mission(self, mission_name: str, objectives: str, scope: str,
-                      roe: str, contacts: Optional[Dict[str, str]] = None) -> Path:
+                      roe: str, contacts: Optional[Dict[str, str]] = None,
+                      lateral_objectives: Optional[str] = None,
+                      internal_scope: Optional[str] = None) -> Path:
         """
         Initialize a new mission workspace.
 
@@ -113,9 +115,22 @@ class ConfigManager:
         config["mission_name"] = mission_name
         # Deep copy bots dict to avoid mutation
         config["bots"] = json.loads(json.dumps(DEFAULT_SWARM_CONFIG["bots"]))
+        # v2 Phase 3: lateral movement objectives
+        if lateral_objectives:
+            config["lateral_objectives"] = lateral_objectives
+        if internal_scope:
+            config["internal_scope"] = internal_scope
         self._write_json(config)
 
         # Write mission.md
+        lateral_section = ""
+        if lateral_objectives:
+            lateral_section += f"\n## Lateral Movement Objectives\n{lateral_objectives}\n"
+            lateral_section += "\nNOTE: Lateral objectives do NOT auto-authorize lateral movement.\n"
+            lateral_section += "The lateral_approval gate must still be passed.\n"
+        if internal_scope:
+            lateral_section += f"\n## Internal Scope (lateral movement)\n{internal_scope}\n"
+
         mission_content = f"""# Mission: {mission_name}
 Created: {timestamp}
 
@@ -127,7 +142,7 @@ Created: {timestamp}
 
 ## Rules of Engagement (RoE)
 {roe}
-
+{lateral_section}
 ## Emergency Contacts
 {json.dumps(contacts or {}, indent=2)}
 
