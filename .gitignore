@@ -3,44 +3,52 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
+dist/
+build/
 *.egg
 
 # Virtual environments
+.venv/
 venv/
 env/
-ENV/
-.venv/
-
-# Environment files
-.env
-.env.*
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
+.DS_Store
 
-# Mission data (per-operation workspaces)
-mission/
+# Mission workspaces (per-operation data)
 mission_*/
+!mission_*/swarm-config.json
+
+# Engagement artifacts
+**/engagement/raw/
+**/engagement/poc/
+**/engagement/report/*.pdf
+**/engagement/warchief_decisions.json
+
+# Config with secrets
+*.env
+.env
+.env.local
+
+# Logs
 *.log
+logs/
 
 # OS
-.DS_Store
 Thumbs.db
+desktop.ini
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Lock files (regenerate as needed)
+poetry.lock
+Pipfile.lock
