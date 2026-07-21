@@ -77,6 +77,11 @@ async def run_operation(mission_dir: Path, swarm_config: dict, auto_approve: boo
         target_artifacts=[],           # v2: for Phase 4.5 cleanup
         failed_vectors=[],            # v2: for Phase 4 resilience
         aggressiveness="cautious",     # v2: default to cautious
+        # v2 Phase 2: decision logic state
+        decision_history=[],            # Rolling window of last 5 decisions
+        mission_state="init",           # State machine position
+        scope_exhausted=False,          # Set when recon finds zero new targets
+        confidence_threshold=0.6,       # Minimum confidence for routing
     )
 
     # Compile graph

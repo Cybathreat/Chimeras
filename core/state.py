@@ -5,16 +5,22 @@ TypedDict for LangGraph state management.
 v2 additions (Phase -1):
   - last_decision: WarChief's latest routing decision (str)
   - loop_count: Per-phase loop counter dict (Dict[str, int])
-  - discovered_targets: All targets found during engagement (Set[str])
-  - external_targets: Initial scope targets (Set[str])
-  - internal_targets: Lateral-discovered targets (Set[str])
-  - exploited_hosts: Hosts with confirmed access (Set[str])
+  - discovered_targets: All targets found during engagement (List[str])
+  - external_targets: Initial scope targets (List[str])
+  - internal_targets: Lateral-discovered targets (List[str])
+  - exploited_hosts: Hosts with confirmed access (List[str])
   - target_context: "external" or "lateral" — which scope we're in (str)
   - target_artifacts: Artifacts left on target — tracked for cleanup (List[Dict])
   - lateral_approval: Second human gate for lateral movement (bool)
   - aggressiveness: Scan intensity level — "cautious" default (str)
   - failed_vectors: Failed attack attempts (List[Dict])
   - max_loops_per_phase: Safety limit per phase (int, default 5)
+
+v2 additions (Phase 2):
+  - decision_history: Rolling list of last N WarChief decisions for trend awareness
+  - mission_state: Current state machine position (str)
+  - scope_exhausted: Flag set when recon finds zero new targets after 2 cycles (bool)
+  - confidence_threshold: Minimum confidence before WarChief defaults to safe route (float)
 """
 
 from typing import TypedDict, List, Dict, Any
@@ -111,3 +117,29 @@ class SwarmState(TypedDict, total=False):
     # WarChief can downgrade based on target response (WAF detection, etc.)
     # Lisa/Bloodhound honor this by adjusting tool flags
     aggressiveness: str
+
+    # ─── v2 Phase 2: Decision history (context window for trends) ───
+    # Rolling list of last N WarChief decisions with reasoning.
+    # Lets WarChief see trends: "ARIA has run 3 times, second run found
+    # nothing new. If third run also empty, time to pivot."
+    # Each entry: {"decision": str, "reasoning": str, "phase": str, "timestamp": str}
+    decision_history: List[Dict[str, Any]]
+
+    # ─── v2 Phase 2: Mission state machine ───
+    # Tracks current position in the engagement lifecycle:
+    # init → recon → scanning → vuln_detection → exploitation_prep →
+    # exploitation → post_exploit → lateral_recon → lateral_scanning →
+    # reporting → complete
+    # Used by graph routing functions to determine context.
+    mission_state: str
+
+    # ─── v2 Phase 2: Scope exhaustion ───
+    # Set to True when ARIA runs 2+ times and finds zero new targets.
+    # Forces WarChief to route to "report" with "scope depleted" reason.
+    scope_exhausted: bool
+
+    # ─── v2 Phase 2: Confidence threshold ───
+    # Minimum confidence WarChief must have before routing.
+    # Below this, defaults to safe conservative route.
+    # Default: 0.6
+    confidence_threshold: float
