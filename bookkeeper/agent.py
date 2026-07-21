@@ -1,21 +1,37 @@
 """
 Chimeras v2.0 — Bookkeeper Agent
+
 Logger/auditor. Reads all engagement files, generates final report.
 No tool execution — file I/O only.
+
+v2 Phase 4.5: Cleanup & rollback section.
+  - Iterates target_artifacts from state
+  - Documents what was left on target and cleanup status
+  - Flags uncleaned artifacts prominently in the report
+
+v2 Phase 5: Decision audit trail.
+  - Reads warchief_decisions.log
+  - Includes engagement flow with all routing decisions
+  - Adds decision metrics (total cycles, why engagement ended)
+  - Writes machine-readable audit JSON alongside markdown report
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime
+import json
 
 from core.base_bot import BaseBot
 from core.state import SwarmState
 
 
 class Bookkeeper(BaseBot):
-    """Bookkeeper — Logger and Report Generator. No tools, reads files only."""
+    """Bookkeeper — Logger and Report Generator. No tools, reads files only.
+
+    v2 Phase 4.5 + 5: Cleanup documentation and decision audit trail.
+    """
 
     bot_name = "bookkeeper"
-    role_description = "operation logger and report generator — reads all findings, generates final report"
+    role_description = "operation logger and report generator — reads all findings, generates final report with cleanup status and decision audit trail"
     scope_description = "Report generation ONLY. Reads engagement files, generates final report. NO tool execution."
 
     def __init__(self, state: SwarmState, swarm_config: Optional[Dict[str, Any]] = None):
@@ -86,134 +102,397 @@ For EACH finding, use this exact structure:
 
 [Repeat for each finding]
 
-## 5. Conclusion
+## 5. Engagement Flow (Decision Audit Trail)
+[Document the sequence of phases the swarm went through. Include WarChief's routing decisions and reasoning. This is the audit trail showing how the engagement progressed from recon to report. List each phase, what was found, and WarChief's decision to proceed, loop back, or abort.]
+
+## 6. Cleanup & Rollback Status
+[List ALL artifacts left on target during the engagement — dropped payloads, scheduled tasks, created users, modified configs. For each artifact, document:
+- Host where artifact was left
+- Type (payload, scheduled task, user, config change)
+- Path or location
+- Whether cleanup was attempted
+- Whether cleanup succeeded or failed
+
+If any artifacts were NOT cleaned up, flag them prominently with ⚠ WARNING. The client needs to know exactly what was left on their systems.]
+
+## 7. Conclusion
 [Overall security posture assessment, summary of risk, priority remediation order]
 
-## 6. Appendix
+## 8. Appendix
 - Tools Used: [list]
 - Raw Output Files: [count, locations]
 - Bots Deployed: [list]
+- Total Decision Cycles: [count]
+- Engagement Ended Because: [mission complete / scope exhausted / authorization issues / insufficient data]
 
 ## Response Format
 Respond with the complete report as markdown. Do NOT wrap in JSON. Do NOT wrap in code blocks. Just write the report directly."""
 
     async def run(self) -> Dict[str, Any]:
-        """Bookkeeper override — doesn't use the standard JSON pipeline.
-        Reads all engagement files, asks LLM for a plain-text report, writes it."""
+        """Bookkeeper override — reads all engagement files, generates report.
+
+        v2 Phase 4.5: Includes cleanup status from target_artifacts.
+        v2 Phase 5: Includes decision audit trail from warchief_decisions.log.
+        Also writes machine-readable audit JSON.
+        """
         self._banner()
         self._log("Bot awakened — reading engagement files", "WAKE")
         self._append_log("Bot awakened — generating final report")
 
-        # Build context from all engagement files
-        context = self._build_context()
-        system = self._build_system_prompt()
-
-        # Ask LLM to generate the report as plain markdown (NOT JSON)
-        self._log("Asking LLM to generate final report...", "THINK")
-        report_prompt = self._build_analysis_prompt("", context)
-
         try:
-            report_response = self._llm(report_prompt, system, max_tokens=16384)
-            self._log("LLM report received", "ANALYZE")
+            # Build context from all engagement files
+            context = self._build_context()
+            system = self._build_system_prompt()
 
-            print(f"\n[{self.bot_name.upper()} LLM REPORT]", flush=True)
-            print(report_response[:2000], flush=True)
-            print(f"[/{self.bot_name.upper()} LLM REPORT]\n", flush=True)
+            # ─── Phase 5: Read decision audit trail ───
+            decision_log = self._read_decision_log()
+            if decision_log:
+                context += f"\n\n## WarChief Decision Log (Audit Trail)\n{decision_log}"
+
+            # ─── Phase 4.5: Read artifact tracking ───
+            artifacts = self.state.get("target_artifacts", [])
+            if artifacts:
+                context += "\n\n## Artifacts Left on Target (Cleanup Tracking)\n"
+                context += self._format_artifacts_for_report(artifacts)
+
+            # Ask LLM to generate the report
+            self._log("Asking LLM to generate final report...", "THINK")
+            report_prompt = self._build_analysis_prompt("", context)
+
+            try:
+                report_response = self._llm(report_prompt, system, max_tokens=16384)
+                self._log("LLM report received", "ANALYZE")
+
+                print(f"\n[{self.bot_name.upper()} LLM REPORT]", flush=True)
+                print(report_response[:2000], flush=True)
+                print(f"[/{self.bot_name.upper()} LLM REPORT]\n", flush=True)
+            except Exception as e:
+                self._log(f"LLM report generation failed: {e}", "ERROR")
+                report_response = (
+                    f"# Final Report — Generation Failed\n\n"
+                    f"**Error**: {e}\n\n"
+                    f"**Timestamp**: {datetime.utcnow().isoformat()}\n\n"
+                    f"The automated report generator encountered an error.\n"
+                    f"Check engagement files in {self.state.get('engagement_dir', 'N/A')} for raw findings.\n"
+                )
+
+            # Strip markdown code block wrappers if present
+            report_text = report_response.strip()
+            if report_text.startswith("```"):
+                first_nl = report_text.find("\n")
+                if first_nl != -1:
+                    report_text = report_text[first_nl + 1:]
+                if report_text.rstrip().endswith("```"):
+                    report_text = report_text.rstrip()[:-3].rstrip()
+
+            # Write the report
+            self._write_report("final_report.md", report_text)
+
+            # Also write executive summary
+            self._write_report("executive_summary.md", report_text[:2000])
+
+            # ─── Phase 4.5: Write cleanup report ───
+            cleanup_report = self._generate_cleanup_report()
+            if cleanup_report:
+                self._write_report("cleanup_report.md", cleanup_report)
+
+            # ─── Phase 5: Write machine-readable audit JSON ───
+            audit_json = self._generate_audit_json()
+            if audit_json:
+                try:
+                    if self.engagement_dir is None:
+                        raise ValueError("No engagement directory set")
+                    audit_path = self.engagement_dir / "report" / "engagement_audit.json"
+                    audit_path.parent.mkdir(parents=True, exist_ok=True)
+                    audit_path.write_text(json.dumps(audit_json, indent=2))
+                    self._log(f"Audit JSON written to {audit_path.name}", "REPORT")
+                except Exception as e:
+                    self._log(f"Failed to write audit JSON: {e}", "ERROR")
+
+            # Write bot file
+            self._write_bot_file(
+                f"# {self.bot_name.upper()} — Final Report\n\n"
+                f"Report generated and saved to report/final_report.md\n"
+                f"Cleanup report: {'report/cleanup_report.md' if artifacts else 'N/A (no artifacts)'}\n"
+                f"Audit JSON: report/engagement_audit.json\n"
+            )
+
+            # Update findings
+            self._append_findings("Final Report", report_text[:3000])
+
+            self._append_log("Final report generated and saved")
+
+            # Update state
+            self._update_state(
+                {"needed": True, "strategy": "final report", "confidence": 1.0},
+                {"report_content": report_text},
+                []
+            )
+
+            self._log("Bot complete", "SLEEP")
+            return {"report": report_text, "executed": True}
+
         except Exception as e:
-            self._log(f"LLM report generation failed: {e}", "ERROR")
-            report_response = f"# Final Report — Generation Failed\n\nError: {e}\n\nPlease check engagement files manually."
+            # Full exception handling — never leave engagement with zero output
+            self._log(f"Bookkeeper run error: {e}", "ERROR")
+            self._append_log(f"ERROR: Bookkeeper failed: {e}")
+            try:
+                error_report = (
+                    f"# Penetration Test Report — Generation Failed\n\n"
+                    f"**Error**: {e}\n\n"
+                    f"**Timestamp**: {datetime.utcnow().isoformat()}\n\n"
+                    f"The report generator encountered a fatal error.\n"
+                    f"Check engagement files for raw findings.\n"
+                )
+                self._write_report("final_report.md", error_report)
+                self._write_bot_file(f"# {self.bot_name.upper()} — FAILED\n\nError: {e}\n")
+            except Exception:
+                # Absolute last resort
+                print(f"[BOOKKEEPER] Could not write any report: {e}")
+            return {"report": "", "executed": False, "error": str(e)}
 
-        # Strip any markdown code block wrappers if present
-        report_text = report_response.strip()
-        if report_text.startswith("```"):
-            # Remove opening ```markdown or ```
-            first_nl = report_text.find("\n")
-            if first_nl != -1:
-                report_text = report_text[first_nl + 1:]
-            if report_text.rstrip().endswith("```"):
-                report_text = report_text.rstrip()[:-3].rstrip()
+    def _read_decision_log(self) -> str:
+        """Read warchief_decisions.log and format for inclusion in report.
 
-        # Write the report
-        self._write_report("final_report.md", report_text)
+        v2 Phase 5: Decision audit trail.
+        """
+        try:
+            if self.engagement_dir is None:
+                return ""
+            log_path = self.engagement_dir / "warchief_decisions.log"
+            if not log_path.exists():
+                return ""
 
-        # Also write executive summary (first section)
-        self._write_report("executive_summary.md", report_text[:2000])
+            lines = log_path.read_text().strip().split("\n")
+            if not lines or lines == [""]:
+                return ""
 
-        # Write bot file
-        self._write_bot_file(f"# {self.bot_name.upper()} — Final Report\n\nReport generated and saved to report/final_report.md\n")
+            formatted = []
+            for i, line in enumerate(lines, 1):
+                try:
+                    entry = json.loads(line)
+                    decision = entry.get("decision", "?")
+                    confidence = entry.get("confidence", 0)
+                    reasoning = entry.get("reasoning", "")[:100]
+                    phase = entry.get("mission_state", entry.get("mission_phase", "?"))
+                    overrides = []
+                    if entry.get("confidence_override"):
+                        overrides.append("confidence")
+                    if entry.get("scope_exhausted_override"):
+                        overrides.append("scope_exhausted")
+                    if entry.get("backtrack_override"):
+                        overrides.append("backtrack")
+                    override_str = f" [overrides: {', '.join(overrides)}]" if overrides else ""
+                    formatted.append(
+                        f"  {i}. [{phase}] → {decision} (confidence: {confidence:.2f}){override_str}\n"
+                        f"     Reasoning: {reasoning}"
+                    )
+                except (json.JSONDecodeError, Exception):
+                    formatted.append(f"  {i}. [unparseable entry]")
 
-        # Update findings
-        self._append_findings("Final Report", report_text[:3000])
+            return "\n".join(formatted)
+        except Exception as e:
+            print(f"[BOOKKEEPER] Failed to read decision log: {e}")
+            return ""
 
-        self._append_log("Final report generated and saved")
+    def _format_artifacts_for_report(self, artifacts: List[Dict[str, Any]]) -> str:
+        """Format target_artifacts for inclusion in the LLM context.
 
-        # Update state
-        self._update_state(
-            {"needed": True, "strategy": "final report", "confidence": 1.0},
-            {"report_content": report_text},
-            []
-        )
+        v2 Phase 4.5: Cleanup tracking.
+        """
+        try:
+            if not artifacts:
+                return "No artifacts left on target.\n"
 
-        self._log("Bot complete", "SLEEP")
-        return {"report": report_text, "executed": True}
+            lines = ["| Host | Type | Path | Cleaned | Description |"]
+            lines.append("|------|------|------|---------|-------------|")
+            for a in artifacts:
+                if not isinstance(a, dict):
+                    continue
+                host = a.get("host", "unknown")
+                art_type = a.get("artifact_type", "unknown")
+                path = a.get("path", "unknown")
+                cleaned = "✓ Yes" if a.get("cleaned", False) else "⚠ NO"
+                desc = a.get("description", "")
+                lines.append(f"| {host} | {art_type} | {path} | {cleaned} | {desc} |")
+
+            uncleaned = [a for a in artifacts if isinstance(a, dict) and not a.get("cleaned", False)]
+            if uncleaned:
+                lines.append(f"\n⚠ WARNING: {len(uncleaned)} artifacts were NOT cleaned up!")
+                lines.append("The client must manually verify and remove these.")
+
+            return "\n".join(lines)
+        except Exception as e:
+            print(f"[BOOKKEEPER] Failed to format artifacts: {e}")
+            return f"Error formatting artifacts: {e}\n"
+
+    def _generate_cleanup_report(self) -> str:
+        """Generate a standalone cleanup report.
+
+        v2 Phase 4.5: Separate cleanup report for client.
+        Lists all artifacts, cleanup status, and warnings for uncleaned items.
+        """
+        try:
+            artifacts = self.state.get("target_artifacts", [])
+            if not artifacts or not isinstance(artifacts, list):
+                return ""
+
+            lines = [
+                "# Cleanup & Rollback Report",
+                f"\nGenerated: {datetime.utcnow().isoformat()}\n",
+                f"Total artifacts tracked: {len(artifacts)}\n",
+            ]
+
+            cleaned = [a for a in artifacts if isinstance(a, dict) and a.get("cleaned", False)]
+            uncleaned = [a for a in artifacts if isinstance(a, dict) and not a.get("cleaned", False)]
+
+            if cleaned:
+                lines.append(f"\n## Cleaned Artifacts ({len(cleaned)})\n")
+                for a in cleaned:
+                    lines.append(f"- **{a.get('host', '?')}**: {a.get('artifact_type', '?')} at {a.get('path', '?')}")
+                    if a.get("description"):
+                        lines.append(f"  - {a['description']}")
+
+            if uncleaned:
+                lines.append(f"\n## ⚠ UNCLENED ARTIFACTS ({len(uncleaned)})\n")
+                lines.append("**These artifacts were left on target and require manual removal.**\n")
+                for a in uncleaned:
+                    lines.append(f"- **{a.get('host', '?')}**: {a.get('artifact_type', '?')} at {a.get('path', '?')}")
+                    if a.get("description"):
+                        lines.append(f"  - {a['description']}")
+
+            if not cleaned and not uncleaned:
+                lines.append("\nNo artifacts were left on target during this engagement.")
+
+            return "\n".join(lines)
+        except Exception as e:
+            print(f"[BOOKKEEPER] Failed to generate cleanup report: {e}")
+            return ""
+
+    def _generate_audit_json(self) -> Dict[str, Any]:
+        """Generate machine-readable audit JSON.
+
+        v2 Phase 5: Machine-readable engagement audit trail.
+        Contains: decisions, metrics, bots deployed, artifacts, state at end.
+        """
+        try:
+            # Read decision log entries
+            decisions = []
+            if self.engagement_dir is not None:
+                log_path = self.engagement_dir / "warchief_decisions.log"
+                if log_path.exists():
+                    for line in log_path.read_text().strip().split("\n"):
+                        try:
+                            decisions.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            pass
+
+            # Determine why engagement ended
+            last_decision = self.state.get("last_decision", "report")
+            end_reason_map = {
+                "report": "mission complete or scope exhausted",
+                "insufficient_data_abort": "insufficient data to continue",
+                "init": "premature end (init phase)",
+            }
+            end_reason = end_reason_map.get(last_decision, f"ended with decision: {last_decision}")
+
+            # Count artifacts
+            artifacts = self.state.get("target_artifacts", [])
+            cleaned_count = sum(1 for a in artifacts if isinstance(a, dict) and a.get("cleaned", False))
+            uncleaned_count = len(artifacts) - cleaned_count
+
+            audit = {
+                "generated_at": datetime.utcnow().isoformat(),
+                "mission": self.state.get("mission", {}),
+                "bots_deployed": list(self.state.get("reasoning_reports", {}).keys()),
+                "decision_count": len(decisions),
+                "decisions": decisions,
+                "end_reason": end_reason,
+                "mission_state": self.state.get("mission_state", "unknown"),
+                "target_context": self.state.get("target_context", "external"),
+                "aggressiveness": self.state.get("aggressiveness", "cautious"),
+                "loop_count": self.state.get("loop_count", {}),
+                "scope_exhausted": self.state.get("scope_exhausted", False),
+                "failed_vectors_count": len(self.state.get("failed_vectors", [])),
+                "discovered_targets": self.state.get("discovered_targets", []),
+                "exploited_hosts": self.state.get("exploited_hosts", []),
+                "internal_targets": self.state.get("internal_targets", []),
+                "artifacts_total": len(artifacts),
+                "artifacts_cleaned": cleaned_count,
+                "artifacts_uncleaned": uncleaned_count,
+                "uncleaned_artifacts": [
+                    a for a in artifacts if isinstance(a, dict) and not a.get("cleaned", False)
+                ],
+            }
+            return audit
+        except Exception as e:
+            print(f"[BOOKKEEPER] Failed to generate audit JSON: {e}")
+            return {}
 
     def _update_state(self, decision: Dict[str, Any], analysis: Dict[str, Any], tool_results: list):
         """Update state with final report."""
-        report_content = analysis.get("report_content", "")
+        try:
+            report_content = analysis.get("report_content", "")
 
-        final_report = {
-            "generated_at": datetime.utcnow().isoformat(),
-            "mission": self.state.get("mission", {}),
-            "bots_deployed": list(self.state.get("reasoning_reports", {}).keys()),
-            "report": report_content,
-        }
+            final_report = {
+                "generated_at": datetime.utcnow().isoformat(),
+                "mission": self.state.get("mission", {}),
+                "bots_deployed": list(self.state.get("reasoning_reports", {}).keys()),
+                "report": report_content,
+            }
 
-        self.state["final_report"] = final_report
-        self.state.setdefault("reasoning_reports", {})[self.bot_name] = decision
+            self.state["final_report"] = final_report
+            self.state.setdefault("reasoning_reports", {})[self.bot_name] = decision
+        except Exception as e:
+            print(f"[BOOKKEEPER] _update_state error: {e}")
 
     def _build_context(self) -> str:
         """Override — Bookkeeper needs FULL findings + raw tool output, not truncated summaries."""
-        findings = self._read_file("findings.md")
-        plan = self._read_plan()
+        try:
+            findings = self._read_file("findings.md")
+            plan = self._read_plan()
 
-        # Read ALL bot files in full (not truncated to 500 chars)
-        bot_reports = []
-        for f in sorted(self.engagement_dir.glob("*.md")):
-            if f.name in ("plan.md", "log.md", "findings.md"):
-                continue
-            bname = f.stem
-            if bname == self.bot_name:
-                continue
-            content = f.read_text()
-            bot_reports.append(f"### {bname}\n{content}")
+            # Read ALL bot files in full (not truncated to 500 chars)
+            bot_reports = []
+            if self.engagement_dir is not None:
+                for f in sorted(self.engagement_dir.glob("*.md")):
+                    if f.name in ("plan.md", "log.md", "findings.md"):
+                        continue
+                    bname = f.stem
+                    if bname == self.bot_name:
+                        continue
+                    content = f.read_text()
+                    bot_reports.append(f"### {bname}\n{content}")
 
-        # Read raw tool output files — this is the actual PoC evidence
-        raw_dir = self.engagement_dir / "raw"
-        raw_outputs = []
-        if raw_dir.exists():
-            for rf in sorted(raw_dir.glob("*.txt")):
-                try:
-                    raw_content = rf.read_text()
-                    # Include up to 4000 chars per raw file — enough for PoC evidence
-                    if len(raw_content) > 4000:
-                        raw_content = raw_content[:4000] + "\n... (truncated, see full in raw/ folder)"
-                    raw_outputs.append(f"### Raw Output: {rf.name}\n```\n{raw_content}\n```")
-                except Exception:
-                    pass
+                # Read raw tool output files — this is the actual PoC evidence
+                raw_dir = self.engagement_dir / "raw"
+                raw_outputs = []
+                if raw_dir.exists():
+                    for rf in sorted(raw_dir.glob("*.txt")):
+                        try:
+                            raw_content = rf.read_text()
+                            if len(raw_content) > 4000:
+                                raw_content = raw_content[:4000] + "\n... (truncated, see full in raw/ folder)"
+                            raw_outputs.append(f"### Raw Output: {rf.name}\n```\n{raw_content}\n```")
+                        except Exception:
+                            pass
 
-        parts = []
-        parts.append(f"## Target\n{self.state.get('mission', {}).get('target', 'N/A')}")
-        parts.append(f"## Scope\n{self.state.get('mission', {}).get('scope', 'N/A')}")
-        if plan:
-            parts.append(f"## Plan\n{plan}")
-        if findings:
-            parts.append(f"## Findings (FULL)\n{findings}")
-        if bot_reports:
-            parts.append(f"## Bot Reports (FULL)\n{chr(10).join(bot_reports)}")
-        if raw_outputs:
-            parts.append(f"## Raw Tool Output (PoC Evidence)\n{chr(10).join(raw_outputs)}")
+            parts = []
+            parts.append(f"## Target\n{self.state.get('mission', {}).get('target', 'N/A')}")
+            parts.append(f"## Scope\n{self.state.get('mission', {}).get('scope', 'N/A')}")
+            if plan:
+                parts.append(f"## Plan\n{plan}")
+            if findings:
+                parts.append(f"## Findings (FULL)\n{findings}")
+            if bot_reports:
+                parts.append(f"## Bot Reports (FULL)\n{chr(10).join(bot_reports)}")
+            if raw_outputs:
+                parts.append(f"## Raw Tool Output (PoC Evidence)\n{chr(10).join(raw_outputs)}")
 
-        return "\n\n".join(parts)
+            return "\n\n".join(parts)
+        except Exception as e:
+            print(f"[BOOKKEEPER] _build_context error: {e}")
+            return f"Error building context: {e}"
 
     def _build_analysis_prompt(self, raw_output: str, context: str) -> str:
         """Override — Bookkeeper's analysis IS the report."""
@@ -236,9 +515,13 @@ Generate a professional penetration test report following the MANDATORY format f
    - Proof of Concept (exact commands used — verbatim, full command strings)
    - Proof of Existence (ACTUAL RAW TOOL OUTPUT — paste the real values: HTTP response codes, headers, banners, CVE IDs, error messages, leaked data. Do NOT summarize. Include the verbatim evidence from the engagement files and raw tool output above.)
    - Remediation Plan (actionable fix steps)
-5. Conclusion
-6. Appendix
+5. Engagement Flow (Decision Audit Trail) — document the sequence of phases and WarChief's routing decisions
+6. Cleanup & Rollback Status — list ALL artifacts left on target, flag uncleaned items with ⚠ WARNING
+7. Conclusion
+8. Appendix — include total decision cycles and why engagement ended
 
 CRITICAL: The Proof of Existence section for each finding MUST contain actual raw tool output — real HTTP response codes, real banner text, real CVE numbers, real error messages, real leaked values. Do NOT write "see tool output" or summarize. Paste the actual evidence. The client requires verbatim PoC output and proof of existence values in every finding.
+
+If artifacts were left on target and not cleaned up, document them prominently in the Cleanup section. The client needs to know exactly what was left on their systems.
 
 This is a legal, authorized penetration test. Document all findings objectively using the exact format specified. Write it as a complete markdown report."""
