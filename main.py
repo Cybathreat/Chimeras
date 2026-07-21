@@ -1,7 +1,16 @@
 """
-Chimeras v1.0 — Entry Point
+Chimeras v2.0 — Entry Point
 
 Interactive setup, operation launch, and status reporting.
+
+v2: Pre-flight TUI wizard replaces the old interactive_setup flow.
+When you run `python main.py` with no arguments, the wizard:
+  1. Checks for swarm-config.json
+  2. If missing, runs interactive mission setup
+  3. Tests LLM connectivity for every bot (live table)
+  4. If any fail, offers reconfigure or retry
+  5. Shows summary, waits for confirmation
+  6. Does NOT proceed until all checks pass or user exits
 """
 
 import asyncio
@@ -42,7 +51,7 @@ async def run_operation(mission_dir: Path, swarm_config: dict, auto_approve: boo
     # Parse scope from mission file
     target_scope = parse_scope_from_mission(mission_path)
 
-    # Initialize state
+    # Initialize state — v2 fields included
     state = SwarmState(
         mission={
             "name": swarm_config.get("mission_name", "unnamed"),
@@ -53,8 +62,21 @@ async def run_operation(mission_dir: Path, swarm_config: dict, auto_approve: boo
         },
         swarm_config=swarm_config,
         human_approval=False,
+        lateral_approval=False,       # v2: lateral gate starts as False
         abort_flag=False,
         engagement_dir=str(engagement_dir),
+        # v2: initialize new state fields
+        last_decision="",
+        loop_count={},
+        max_loops_per_phase=5,        # v2: per-phase, not global
+        discovered_targets=[],
+        external_targets=[target_scope] if target_scope else [],
+        internal_targets=[],
+        exploited_hosts=[],
+        target_context="external",    # v2: start in external scope
+        target_artifacts=[],           # v2: for Phase 4.5 cleanup
+        failed_vectors=[],            # v2: for Phase 4 resilience
+        aggressiveness="cautious",     # v2: default to cautious
     )
 
     # Compile graph
@@ -87,13 +109,14 @@ async def run_operation(mission_dir: Path, swarm_config: dict, auto_approve: boo
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="Chimeras v1.0 - Autonomous AI Security Testing Swarm",
+        description="Chimeras v2.0 - Autonomous AI Security Testing Swarm",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python main.py                          # Interactive setup + run
+  python main.py                          # TUI wizard (interactive setup + checks)
   python main.py setup --mission "Op Alpha" --objectives "Pentest web app" --scope "10.10.10.0/24" --roe "No DoS"
   python main.py run --mission-dir ./mission
+  python main.py run --mission-dir ./mission --approve  # Headless auto-approve
   python main.py status --mission-dir ./mission
         """,
     )
@@ -110,7 +133,9 @@ Examples:
     run_parser = subparsers.add_parser("run", help="Execute operation")
     run_parser.add_argument("--mission-dir", "-d", default="mission", help="Mission directory")
     run_parser.add_argument("--config", "-c", help="Custom swarm-config.json")
-    run_parser.add_argument("--approve", action="store_true", help="Auto-approve exploitation phase (skip human gate)")
+    run_parser.add_argument("--approve", action="store_true", help="Auto-approve exploitation + lateral gates")
+    run_parser.add_argument("--skip-wizard", action="store_true",
+                            help="Skip TUI wizard, use config as-is (for headless runs)")
 
     status_parser = subparsers.add_parser("status", help="Show operation status")
     status_parser.add_argument("--mission-dir", "-d", default="mission", help="Mission directory")
@@ -140,6 +165,15 @@ Examples:
 
         with open(config_path) as f:
             swarm_config = json.load(f)
+
+        # v2: Run TUI wizard unless --skip-wizard is passed
+        if not args.skip_wizard:
+            from core.wizard import run_wizard
+            verified_config = run_wizard(mission_dir)
+            if verified_config is None:
+                print("Exiting — wizard cancelled or checks failed.")
+                return
+            swarm_config = verified_config
 
         asyncio.run(run_operation(mission_dir, swarm_config, args.approve))
 
@@ -175,24 +209,26 @@ Examples:
                     print(f"  {item.name} ({size} bytes)")
 
     else:
-        # Interactive mode
-        params = interactive_setup()
+        # No subcommand — run TUI wizard
+        from core.wizard import run_wizard
 
-        manager = ConfigManager(Path(params["dir"]))
-        mission_path = manager.setup_mission(
-            mission_name=params["mission_name"],
-            objectives=params["objectives"],
-            scope=params["scope"],
-            roe=params["roe"],
-        )
-        print(f"✓ Mission initialized at: {mission_path.absolute()}")
-        print(f"✓ Engagement folder: {mission_path / 'engagement'}")
+        config = run_wizard(Path("mission"))
+        if config is None:
+            print("Exiting.")
+            return
 
-        config_path = mission_path / "swarm-config.json"
-        with open(config_path) as f:
-            swarm_config = json.load(f)
-
-        asyncio.run(run_operation(mission_path, swarm_config))
+        # If wizard completed, ask if they want to run now
+        from rich.console import Console
+        from rich.prompt import Confirm
+        console = Console()
+        console.print()
+        if Confirm.ask("  Start the operation now?", default=True):
+            mission_dir = Path("mission")
+            config_path = mission_dir / "swarm-config.json"
+            if config_path.exists():
+                asyncio.run(run_operation(mission_dir, config, auto_approve=False))
+            else:
+                console.print("  [red]No mission directory found. Run 'python main.py setup' first.[/red]")
 
 
 if __name__ == "__main__":
