@@ -1,8 +1,13 @@
 """
-Chimeras v1.0 — Config Manager + Interactive Setup
+Chimeras v2.0 — Config Manager + Interactive Setup
 
 Handles mission initialization, swarm-config.json management,
 engagement folder structure, and interactive CLI setup.
+
+v2 Phase 0: Config migration — auto-upgrades v1 configs to v2 schema.
+  - Adds version field
+  - Fills missing bots with defaults
+  - Initializes v2 state fields in config
 """
 
 import json
@@ -12,8 +17,11 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 
 
+# v2 config schema version
+CONFIG_VERSION = "2.0"
+
 DEFAULT_SWARM_CONFIG = {
-    "version": "2.0",
+    "version": CONFIG_VERSION,
     "created": None,
     "mission_name": None,
     "bots": {
@@ -28,7 +36,10 @@ DEFAULT_SWARM_CONFIG = {
         "bookkeeper":   {"provider": "openai", "model": "glm-5.2", "base_url": "https://ollama.com/v1"},
     },
     "fallback_chain": ["ollama"],
-    "human_approval_required": True
+    "human_approval_required": True,
+    # v2 fields
+    "max_loops_per_phase": 5,
+    "default_aggressiveness": "cautious",
 }
 
 # Engagement folder structure
@@ -167,10 +178,50 @@ Meticulous, impartial, complete. Records everything.
         return self.mission_dir
 
     def load_config(self) -> Dict[str, Any]:
-        """Load swarm-config.json."""
+        """Load swarm-config.json.
+
+        v2: Auto-migrates v1 configs to v2 schema if needed.
+        """
         if not self.config_path.exists():
             self._write_json(DEFAULT_SWARM_CONFIG)
-        return self._read_json(self.config_path)
+        config = self._read_json(self.config_path)
+
+        # v2: Check if migration is needed
+        config_version = config.get("version", "1.0")
+        if config_version != CONFIG_VERSION:
+            config = self._migrate_config(config)
+
+        return config
+
+    def _migrate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Migrate v1 config to v2 schema.
+
+        Changes:
+        - Adds version field
+        - Fills missing bots with defaults
+        - Adds v2 fields (max_loops_per_phase, default_aggressiveness)
+        - Saves migrated config to disk
+        """
+        old_version = config.get("version", "1.0")
+
+        # Ensure all bots are present
+        for bot_name, bot_default in DEFAULT_SWARM_CONFIG["bots"].items():
+            if bot_name not in config.get("bots", {}):
+                config["bots"][bot_name] = bot_default.copy()
+
+        # Add v2 fields if missing
+        if "max_loops_per_phase" not in config:
+            config["max_loops_per_phase"] = 5
+        if "default_aggressiveness" not in config:
+            config["default_aggressiveness"] = "cautious"
+
+        # Update version
+        config["version"] = CONFIG_VERSION
+
+        # Save migrated config
+        self._write_json(config)
+
+        return config
 
     def update_bot_config(self, bot_name: str, provider: str,
                           model: Optional[str] = None,

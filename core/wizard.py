@@ -97,6 +97,8 @@ def step_header(num: int, title: str, subtitle: str = ""):
 def check_config_file(mission_dir: Path) -> Optional[Dict[str, Any]]:
     """Check if swarm-config.json exists and is valid.
 
+    v2: Uses ConfigManager.load_config() which auto-migrates v1 configs.
+
     Returns:
         - Config dict if found and valid
         - None if not found or invalid
@@ -119,13 +121,19 @@ def check_config_file(mission_dir: Path) -> Optional[Dict[str, Any]]:
         console.print("  [red]✗  Config missing 'bots' section[/red]")
         return None
 
+    # v2: Auto-migrate if needed
+    config_version = config.get("version", "1.0")
+    if config_version != "2.0":
+        console.print(f"  [yellow]→  Migrating config from v{config_version} to v2.0...[/yellow]")
+        manager = ConfigManager(mission_dir)
+        config = manager._migrate_config(config)
+        console.print("  [green]✓  Config migrated to v2.0[/green]")
+
     missing_bots = [b for b in BOT_ORDER if b not in config["bots"]]
     if missing_bots:
         console.print(f"  [yellow]⚠  Config missing bots: {', '.join(missing_bots)}[/yellow]")
-        # Fill in missing bots with defaults
         for bot in missing_bots:
             config["bots"][bot] = DEFAULT_SWARM_CONFIG["bots"][bot].copy()
-        # Save the fixed config
         with open(config_path, "w") as f:
             json.dump(config, f, indent=2)
         console.print("  [green]✓  Missing bots filled with defaults[/green]")

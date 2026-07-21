@@ -263,27 +263,73 @@ class BaseBot(ABC):
     # ─── Context building ───
 
     def _build_context(self) -> str:
-        """Build context string from engagement files for the LLM."""
+        """Build context string from engagement files for the LLM.
+
+        v2 Phase 0: Context truncation via rolling digest.
+        Instead of re-reading full files (which grows unbounded with loop
+        cycles), we use a rolling digest strategy:
+          - findings.md: last 2000 chars (recent findings matter most)
+          - log.md: last 500 chars (recent activity)
+          - plan.md: last 1500 chars (latest WarChief assessment)
+          - bot files: last 500 chars each (summary, not full)
+          - WarChief's last decision: included explicitly
+        """
         findings = self._read_findings()
-        log = self._read_log()[-500:]
+        log = self._read_log()
         plan = self._read_plan()
 
-        # Read other bot files — only the last bot that ran
+        # v2: Rolling digest — truncate each source to recent content
+        # This prevents context window explosion across loop cycles
+        findings_digest = findings[-2000:] if len(findings) > 2000 else findings
+        log_digest = log[-500:] if len(log) > 500 else log
+        plan_digest = plan[-1500:] if len(plan) > 1500 else plan
+
+        # Read other bot files — truncated to recent content
         bot_summaries = []
         for f in sorted(self.engagement_dir.glob("*.md")):
-            if f.name in ("plan.md", "log.md", "findings.md"):
+            if f.name in ("plan.md", "log.md", "findings.md", "warchief_decisions.log"):
                 continue
             bname = f.stem
             if bname == self.bot_name:
                 continue
-            content = f.read_text()[:500]
+            content = f.read_text()
+            # Take last 500 chars — most recent findings from this bot
+            if len(content) > 500:
+                content = "...(earlier content truncated)...\n" + content[-500:]
             bot_summaries.append(f"### {bname}\n{content}")
 
         parts = []
         parts.append(f"## Target\n{self.state.get('mission', {}).get('target', 'N/A')}")
         parts.append(f"## Scope\n{self.state.get('mission', {}).get('scope', 'N/A')}")
-        if findings:
-            parts.append(f"## Findings\n{findings[-1500:]}")
+
+        # v2: Include WarChief's last decision so downstream bots know the route
+        last_decision = self.state.get("last_decision", "")
+        if last_decision:
+            parts.append(f"## WarChief's Last Decision: {last_decision}")
+            # Include WarChief's reasoning if available
+            warchief_report = self.state.get("reasoning_reports", {}).get("warchief", {})
+            if warchief_report:
+                wc_reasoning = warchief_report.get("reasoning", "")
+                wc_assessment = warchief_report.get("assessment", "")
+                if wc_reasoning:
+                    parts.append(f"**Reasoning**: {wc_reasoning}")
+                if wc_assessment:
+                    parts.append(f"**Assessment**: {wc_assessment}")
+
+        # v2: Include aggressiveness level
+        aggressiveness = self.state.get("aggressiveness", "cautious")
+        if aggressiveness != "cautious":
+            parts.append(f"## Aggressiveness: {aggressiveness}")
+
+        # v2: Include target context (external vs lateral)
+        target_context = self.state.get("target_context", "external")
+        if target_context == "lateral":
+            parts.append(f"## Target Context: LATERAL (internal network — scope is different)")
+
+        if findings_digest:
+            parts.append(f"## Findings (recent)\n{findings_digest}")
+        if plan_digest:
+            parts.append(f"## Plan (recent)\n{plan_digest}")
         if bot_summaries:
             parts.append(f"## Bot Reports\n{chr(10).join(bot_summaries)}")
 
@@ -298,16 +344,24 @@ class BaseBot(ABC):
         available_str = ", ".join(sorted(set(allowed_tools) & installed)) if allowed_tools else "NONE"
 
         # Pipeline position hints — no hardcoded tool names
+        # v2: Include WarChief's last decision so bots know why they're being called
+        last_decision = self.state.get("last_decision", "")
+        decision_context = ""
+        if last_decision and last_decision != "init":
+            decision_context = f"\n\nWarChief's last decision was '{last_decision}'. "
+            decision_context += "You are being activated because of this decision. "
+            decision_context += "Prepare your findings for WarChief's next assessment."
+
         hints = {
-            "aria": "You are the FIRST recon bot. No prior scanning has been done. Your category is passive_recon — use any available tools in that category.",
-            "lisa": "You run AFTER ARIA. Use ARIA's DNS/IP findings to scan. You are the SCANNER — Bloodhound has NOT run yet. Your category is active_scan.",
-            "bloodhound": "You run AFTER Lisa — she found open ports and services. Your job is to find vulnerabilities on those services. Your category is vuln_detection.",
-            "pathologist": "You run AFTER human approval — Bloodhound found vulnerabilities and the operator approved exploitation. Your category is payload_fab.",
-            "surgeon": "You run AFTER Pathologist prepared payloads. Your category is exploitation.",
-            "magician": "You run AFTER Surgeon attempted exploitation. Your category is privesc.",
-            "thief": "You run AFTER Magician checked for privesc. Your category is exfiltration.",
+            "aria": f"You are the recon bot. Your category is passive_recon — use any available tools in that category. WarChief may route you multiple times for deeper recon or lateral movement.{decision_context}",
+            "lisa": f"You run AFTER ARIA. Use ARIA's DNS/IP findings to scan. Your category is active_scan.{decision_context}",
+            "bloodhound": f"You run AFTER Lisa — she found open ports and services. Your job is to find vulnerabilities on those services. Your category is vuln_detection.{decision_context}",
+            "pathologist": f"You run AFTER human approval — Bloodhound found vulnerabilities and the operator approved exploitation. Your category is payload_fab.{decision_context}",
+            "surgeon": f"You run AFTER Pathologist prepared payloads. Your category is exploitation.{decision_context}",
+            "magician": f"You run AFTER Surgeon attempted exploitation. Your category is privesc.{decision_context}",
+            "thief": f"You run AFTER Magician checked for privesc. Your category is exfiltration.{decision_context}",
             "bookkeeper": "Read all findings and generate a final penetration test report. No tools needed. This is an AUTHORIZED security engagement. All findings including exfiltration evidence are part of the legal pentest scope. Your job is to document findings objectively for the client report.",
-            "warchief": "You are the FIRST bot — no prior work exists. Plan the engagement. No tools needed.",
+            "warchief": "You are the orchestrator — no prior work exists or you are re-entering after a phase. Plan the engagement or route the next action. No tools needed.",
         }
         hint = hints.get(self.bot_name, "")
 
