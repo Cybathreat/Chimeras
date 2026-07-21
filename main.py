@@ -20,7 +20,7 @@ import re
 from pathlib import Path
 from datetime import datetime
 
-from core.config import ConfigManager, interactive_setup
+from core.config import ConfigManager
 from core.state import SwarmState
 from graph import compile_graph
 

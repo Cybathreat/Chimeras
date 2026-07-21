@@ -1,6 +1,5 @@
 """
-Chimeras v1.0 — OpenAI Provider
-
+Chimeras v2.0 — OpenAI Provider
 GPT-4o and GPT-4 Turbo models via OpenAI API.
 Supports custom base_url for OpenAI-compatible gateways (Azure, vLLM, LM Studio, Ollama Cloud, proxies).
 """

@@ -1,6 +1,5 @@
 """
-Chimeras v1.0 — Pathologist Agent
-
+Chimeras v2.0 — Pathologist Agent
 Payload fabrication. Creates custom payloads based on vuln findings.
 Scope: msfvenom, searchsploit, curl (for downloading payloads)
 Does NOT deliver payloads — that's Surgeon's job.

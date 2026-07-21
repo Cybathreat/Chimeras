@@ -1,6 +1,5 @@
 """
-Chimeras v1.0 — OpenRouter Provider
-
+Chimeras v2.0 — OpenRouter Provider
 Any model via OpenRouter API (anthropic/claude-3.5-sonnet, openai/gpt-4o, etc.)
 """
 

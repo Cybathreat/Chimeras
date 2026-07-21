@@ -164,7 +164,7 @@ If you are unsure, default to "scan" to gather more data, or "report" if scope i
             raw_decision = "report"
             decision["decision"] = raw_decision
             decision["_fallback"] = True
-            decision["_fallback_reason"] = f"Invalid decision value, defaulted to 'report'"
+            decision["_fallback_reason"] = "Invalid decision value, defaulted to 'report'"
 
         # Store in state for downstream bots and graph routing
         self.state["last_decision"] = raw_decision

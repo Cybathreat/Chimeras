@@ -1,6 +1,5 @@
 """
-Chimeras v1.0 — Surgeon Agent
-
+Chimeras v2.0 — Surgeon Agent
 Exploitation specialist. Executes exploits against human-approved targets.
 HUMAN-IN-LOOP GATE: only runs if human_approval=True
 Scope: msfconsole, msfvenom, sqlmap, nc, python3
@@ -27,7 +26,7 @@ class Surgeon(BaseBot):
             self._banner()
             self._log("HUMAN APPROVAL NOT GRANTED — exploitation blocked", "GATE")
             self._append_log("BLOCKED: Human approval not granted. Exploitation skipped.")
-            self._write_bot_file(f"# SURGEON — BLOCKED\n\nHuman approval not granted. Exploitation phase skipped.\n")
+            self._write_bot_file("# SURGEON — BLOCKED\n\nHuman approval not granted. Exploitation phase skipped.\n")
             decision = {"needed": True, "strategy": "await_approval", "confidence": 1.0,
                         "reasoning": "Human approval gate not passed."}
             self.state.setdefault("reasoning_reports", {})[self.bot_name] = decision

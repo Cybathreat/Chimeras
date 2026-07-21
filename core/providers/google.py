@@ -1,6 +1,5 @@
 """
-Chimeras v1.0 — Google Provider
-
+Chimeras v2.0 — Google Provider
 Gemini 2.5 Flash and Pro models via Google AI API.
 """
 

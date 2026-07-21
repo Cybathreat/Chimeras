@@ -567,7 +567,7 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
                         "report": error_report,
                     }
             except Exception:
-                print(f"[BOOKKEEPER] Could not write error report")
+                print("[BOOKKEEPER] Could not write error report")
         return state
 
     # ─── Add all nodes ───

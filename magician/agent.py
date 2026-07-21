@@ -1,6 +1,5 @@
 """
-Chimeras v1.0 — Magician Agent
-
+Chimeras v2.0 — Magician Agent
 Privilege escalation and lateral movement.
 Scope: linpeas, find, cat, ls, ssh, smbclient, python3, bash
 """

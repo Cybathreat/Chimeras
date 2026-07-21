@@ -1,12 +1,10 @@
 """
-Chimeras v1.0 — Anthropic Provider
-
+Chimeras v2.0 — Anthropic Provider
 Claude Opus, Sonnet, and Haiku models via Anthropic API.
 Supports custom base_url for Anthropic-compatible proxies and gateways.
 """
 
 from typing import Optional, AsyncIterator
-import asyncio
 
 from core.llm_router import LLMProvider
 

@@ -1,6 +1,5 @@
 """
-Chimeras v1.0 — Universal LLM Router
-
+Chimeras v2.0 — Universal LLM Router
 Routes LLM requests to any of 6 providers with a unified interface.
 Fallback chain: groq → openrouter → ollama
 

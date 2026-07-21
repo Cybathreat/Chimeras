@@ -1,13 +1,11 @@
 """
-Chimeras v1.0 — Bookkeeper Agent
-
+Chimeras v2.0 — Bookkeeper Agent
 Logger/auditor. Reads all engagement files, generates final report.
 No tool execution — file I/O only.
 """
 
 from typing import Dict, Any, Optional
 from datetime import datetime
-import json
 
 from core.base_bot import BaseBot
 from core.state import SwarmState
@@ -176,7 +174,6 @@ Respond with the complete report as markdown. Do NOT wrap in JSON. Do NOT wrap i
     def _build_context(self) -> str:
         """Override — Bookkeeper needs FULL findings + raw tool output, not truncated summaries."""
         findings = self._read_file("findings.md")
-        log = self._read_log()
         plan = self._read_plan()
 
         # Read ALL bot files in full (not truncated to 500 chars)

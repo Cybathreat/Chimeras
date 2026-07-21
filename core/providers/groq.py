@@ -1,6 +1,5 @@
 """
-Chimeras v1.0 — Groq Provider
-
+Chimeras v2.0 — Groq Provider
 Llama 3.3 70B and Mixtral models via Groq API.
 """
 

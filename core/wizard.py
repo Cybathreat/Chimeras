@@ -16,21 +16,15 @@ Uses Rich for terminal rendering. No external TUI framework needed.
 
 import json
 import os
-import sys
 import time
 from pathlib import Path
-from datetime import datetime
 from typing import Dict, Any, Optional, List
 
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Prompt, Confirm, IntPrompt
+from rich.prompt import Prompt, Confirm
 from rich.table import Table
 from rich.live import Live
-from rich.text import Text
-from rich.align import Align
-from rich.padding import Padding
-from rich.columns import Columns
 from rich import box
 
 from core.config import ConfigManager, DEFAULT_SWARM_CONFIG, interactive_setup
@@ -243,7 +237,7 @@ def render_connectivity_table(results: List[Dict[str, Any]]) -> Table:
         elif status == "testing":
             status_str = f"[yellow]⟳ {status}[/yellow]"
         elif status == "empty":
-            status_str = f"[yellow]⚠ empty[/yellow]"
+            status_str = "[yellow]⚠ empty[/yellow]"
         else:
             status_str = f"[red]✗ {status}[/red]"
 

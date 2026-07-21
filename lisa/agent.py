@@ -1,6 +1,5 @@
 """
-Chimeras v1.0 — Lisa Agent
-
+Chimeras v2.0 — Lisa Agent
 Active scanning bot. Port scanning, service enum, OS detection.
 Scope: nmap, masscan, nikto, whatweb, gobuster, wpscan
 """

@@ -347,7 +347,7 @@ class TargetValidator:
             - (False, reason) if any target is out of scope
         """
         if not self.mission_scope and not self.internal_scope:
-            # No scope defined — allow (v1 compatibility for missions without scope)
+            # No scope defined — allow (missions without explicit scope)
             return True, "No scope defined — skipping target validation"
 
         ips, hostnames = self._extract_targets(command)

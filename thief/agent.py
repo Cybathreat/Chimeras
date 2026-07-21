@@ -1,6 +1,5 @@
 """
-Chimeras v1.0 — Thief Agent
-
+Chimeras v2.0 — Thief Agent
 Data exfiltration specialist. Extracts data from compromised systems.
 Scope: curl, wget, nc, python3, tar, gzip, scp
 """

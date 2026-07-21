@@ -1,6 +1,5 @@
 """
-Chimeras v1.0 — Bloodhound Agent
-
+Chimeras v2.0 — Bloodhound Agent
 Vulnerability hunter. Identifies CVEs, misconfigs, scores them.
 Scope: nmap scripts, nuclei, searchsploit, nikto
 """

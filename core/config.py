@@ -11,7 +11,6 @@ v2 Phase 0: Config migration — auto-upgrades v1 configs to v2 schema.
 """
 
 import json
-import os
 from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime
@@ -202,8 +201,6 @@ Meticulous, impartial, complete. Records everything.
         - Adds v2 fields (max_loops_per_phase, default_aggressiveness)
         - Saves migrated config to disk
         """
-        old_version = config.get("version", "1.0")
-
         # Ensure all bots are present
         for bot_name, bot_default in DEFAULT_SWARM_CONFIG["bots"].items():
             if bot_name not in config.get("bots", {}):

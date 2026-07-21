@@ -1,6 +1,5 @@
 """
-Chimeras v1.0 — Ollama Provider
-
+Chimeras v2.0 — Ollama Provider
 Local Ollama models (DEFAULT provider). qwen2.5, llama3, etc.
 Supports custom base_url for remote Ollama instances.
 """

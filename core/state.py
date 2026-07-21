@@ -17,7 +17,7 @@ v2 additions (Phase -1):
   - max_loops_per_phase: Safety limit per phase (int, default 5)
 """
 
-from typing import TypedDict, List, Dict, Any, Optional, Set
+from typing import TypedDict, List, Dict, Any
 
 
 class SwarmState(TypedDict, total=False):

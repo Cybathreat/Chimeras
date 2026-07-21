@@ -1,6 +1,5 @@
 """
-Chimeras v1.0 — ARIA Agent
-
+Chimeras v2.0 — ARIA Agent
 Passive reconnaissance bot. OSINT only. NO active scanning.
 Scope: dig, host, whois, curl, whatweb
 """

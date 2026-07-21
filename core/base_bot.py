@@ -1,5 +1,5 @@
 """
-Chimeras v1.0 — Abstract Base Bot
+Chimeras v2.0 — Abstract Base Bot
 
 The LLM IS the brain. No hardcoded fallback.
 Bots read engagement files, LLM decides what tools to run,
@@ -12,11 +12,10 @@ from datetime import datetime
 from pathlib import Path
 import json
 import re
-import os
 
 from core.llm_router import LLMRouter
 from core.tool_executor import ToolExecutor
-from core.scope import ScopeEnforcer, ScopeViolation
+from core.scope import ScopeEnforcer
 from core.state import SwarmState
 
 
@@ -275,13 +274,11 @@ class BaseBot(ABC):
           - WarChief's last decision: included explicitly
         """
         findings = self._read_findings()
-        log = self._read_log()
         plan = self._read_plan()
 
         # v2: Rolling digest — truncate each source to recent content
         # This prevents context window explosion across loop cycles
         findings_digest = findings[-2000:] if len(findings) > 2000 else findings
-        log_digest = log[-500:] if len(log) > 500 else log
         plan_digest = plan[-1500:] if len(plan) > 1500 else plan
 
         # Read other bot files — truncated to recent content
@@ -324,7 +321,7 @@ class BaseBot(ABC):
         # v2: Include target context (external vs lateral)
         target_context = self.state.get("target_context", "external")
         if target_context == "lateral":
-            parts.append(f"## Target Context: LATERAL (internal network — scope is different)")
+            parts.append("## Target Context: LATERAL (internal network — scope is different)")
 
         if findings_digest:
             parts.append(f"## Findings (recent)\n{findings_digest}")
@@ -339,7 +336,6 @@ class BaseBot(ABC):
         """Build the bot's system prompt with scope enforcement."""
         category = ScopeEnforcer.get_bot_category(self.bot_name)
         allowed_tools = sorted(ScopeEnforcer.get_allowed_tools(self.bot_name))
-        tools_str = ", ".join(allowed_tools) if allowed_tools else "NONE"
         installed = ScopeEnforcer._discover_installed_tools()
         available_str = ", ".join(sorted(set(allowed_tools) & installed)) if allowed_tools else "NONE"
 
@@ -425,11 +421,11 @@ Respond ONLY with JSON:
             #   - The graph doesn't stall waiting for a bot that died
             #   - WarChief (if this IS WarChief) produces a default "report" route
             self._log(f"LLM response unparseable: {e} — using safe fallback", "ERROR")
-            self._append_log(f"WARNING: LLM response unparseable. Using safe fallback (conservative skip).")
+            self._append_log("WARNING: LLM response unparseable. Using safe fallback (conservative skip).")
             self._write_bot_file(
                 f"# {self.bot_name.upper()} — SAFE FALLBACK\n\n"
-                f"LLM response could not be parsed.\n"
-                f"Fallback: conservative skip (bot did not execute).\n"
+                "LLM response could not be parsed.\n"
+                "Fallback: conservative skip (bot did not execute).\n"
                 f"Error: {e}\n"
             )
             # Build a conservative fallback decision
@@ -439,7 +435,7 @@ Respond ONLY with JSON:
                 "confidence": 0.0,
                 "reasoning": f"LLM response unparseable — conservative skip. Error: {e}",
                 "commands": [],
-                "skip_reason": f"LLM parse failure — safe fallback activated",
+                "skip_reason": "LLM parse failure — safe fallback activated",
             }
             self.state.setdefault("reasoning_reports", {})[self.bot_name] = fallback_decision
             return {"reasoning": fallback_decision, "executed": False, "failed": True,
@@ -554,12 +550,12 @@ No other text. Just the JSON."""
             self._append_findings(strategy.title(), report_content)
 
         # Update bot file with analysis
-        self._append_bot_file(f"\n## Analysis\n\n")
+        self._append_bot_file("\n## Analysis\n\n")
         self._append_bot_file(f"Summary: {analysis.get('summary', 'N/A')}\n\n")
-        self._append_bot_file(f"Findings:\n")
+        self._append_bot_file("Findings:\n")
         for f in analysis.get("findings", []):
             self._append_bot_file(f"- {f}\n")
-        self._append_bot_file(f"\nRecommendations:\n")
+        self._append_bot_file("\nRecommendations:\n")
         for r in analysis.get("recommendations", []):
             self._append_bot_file(f"- {r}\n")
 
@@ -567,7 +563,6 @@ No other text. Just the JSON."""
         self._append_log("Execution complete — bot going to sleep")
 
         # Step 6: Update state
-        structured_data = analysis.get("structured_data", {})
         self._update_state(decision, analysis, tool_results)
 
         self._log("Bot complete", "SLEEP")
