@@ -1,13 +1,13 @@
-# Configuration
+# Configuration (v2)
 
 ## swarm-config.json
 
-Each mission has its own `swarm-config.json` that configures the LLM provider for each bot.
+Each mission has its own `swarm-config.json` that configures the LLM provider for each bot. v1 configs are auto-migrated to v2 on load.
 
 ```json
 {
-  "version": "1.0",
-  "created": "2026-07-16T23:05:28",
+  "version": "2.0",
+  "created": "2026-07-21T00:00:00",
   "mission_name": "My Pentest",
   "bots": {
     "warchief":   {"provider": "openai", "model": "gpt-4o"},
@@ -22,6 +22,15 @@ Each mission has its own `swarm-config.json` that configures the LLM provider fo
   }
 }
 ```
+
+## v1 → v2 Auto-Migration (v2)
+
+When a v1 `swarm-config.json` is loaded, `ConfigManager` automatically:
+- Updates `version` from `1.0` to `2.0`
+- Preserves all existing bot configs
+- Logs a migration message
+
+No manual action needed. The TUI wizard displays the migration message.
 
 ## Per-Bot Configuration
 
@@ -90,9 +99,19 @@ API key: `OLLAMA_API_KEY`
 
 Config `base_url` takes precedence over environment `base_url`.
 
+## TUI Wizard (v2)
+
+Run `python main.py` with no arguments to launch the Rich-based TUI wizard. It performs a 3-step pre-flight:
+
+1. **Config check** — verifies `swarm-config.json`, auto-migrates v1→v2 if needed
+2. **LLM connectivity** — tests all 9 bot LLM connections, shows status + latency table
+3. **Summary** — mission parameters, bot configs, confirmation prompt
+
+Skip with `--skip-wizard` for CI/headless runs.
+
 ## Interactive Setup
 
-Run `python main.py` with no arguments for interactive setup. It prompts for:
+Run `python main.py` with no arguments for interactive setup. The wizard prompts for:
 - Mission name
 - Objectives
 - Scope (IPs, domains, CIDR ranges)
