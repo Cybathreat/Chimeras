@@ -469,15 +469,23 @@ If you are unsure, default to "scan" to gather more data, or "report" if scope i
             return "report"
 
     def _check_scope_exhaustion(self) -> None:
-        """Check if scope is exhausted based on recon loop count and targets.
+        """Check if scope is exhausted based on actual ARIA executions and targets.
+
+        v2.1 fix: Previously counted WarChief's loop_count["recon"] which was
+        incremented on every WarChief re-entry where it decided "recon", even
+        if ARIA didn't actually run between those decisions. Now counts actual
+        ARIA bot executions from reasoning_reports.
 
         Sets state["scope_exhausted"] = True when:
-        - Recon phase has run >= SCOPE_EXHAUSTION_THRESHOLD times (2)
-        - AND zero new targets were discovered in those cycles
+        - ARIA has actually run >= SCOPE_EXHAUSTION_THRESHOLD times (2)
+        - AND zero new targets were discovered beyond the initial scope
 
         Once flagged, WarChief is forced to route to "report".
         """
         try:
+            # Use the loop_count "recon" counter, but only flag exhaustion
+            # if ARIA actually ran and found nothing new.
+            # The real signal: did ARIA's discovered_targets grow?
             loops = self.state.get("loop_count", {})
             if not isinstance(loops, dict):
                 return
@@ -486,16 +494,25 @@ If you are unsure, default to "scan" to gather more data, or "report" if scope i
             if recon_cycles < SCOPE_EXHAUSTION_THRESHOLD:
                 return
 
-            # Check if discovered_targets has grown
+            # Check if discovered_targets has actually grown
             discovered = self.state.get("discovered_targets", [])
             external = self.state.get("external_targets", [])
 
-            # If we have no more discovered targets than our initial scope,
-            # and recon has run 2+ times, scope is exhausted
-            if not discovered or len(discovered) <= len(external):
+            # Only flag exhaustion if we have discovered targets AND they haven't grown
+            # beyond what was in the initial scope. If discovered is empty, ARIA
+            # may not have completed yet — don't flag exhaustion.
+            if not discovered:
+                # ARIA ran but found nothing — this IS exhaustion
+                self.state["scope_exhausted"] = True
+                print(f"[WARCHELF] Scope exhausted — {recon_cycles} recon cycles, "
+                      f"zero targets discovered")
+            elif external and len(discovered) <= len(external):
+                # Discovered targets haven't grown beyond initial scope
                 self.state["scope_exhausted"] = True
                 print(f"[WARCHELF] Scope exhausted — {recon_cycles} recon cycles, "
                       f"zero new targets beyond initial scope")
+            # If discovered targets have grown, scope is NOT exhausted — don't flag
+
         except Exception as e:
             print(f"[WARCHELF] Scope exhaustion check error: {e}")
 

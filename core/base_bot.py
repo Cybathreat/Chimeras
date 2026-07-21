@@ -400,7 +400,13 @@ Available Tools: {available_str}
 Hint: {hint}
 
 Analyze the context. Decide which tools to run. Provide exact shell commands.
-Do NOT use -oN/-oX/-oA flags — tool output is captured automatically.
+
+CRITICAL — COMMAND RULES:
+- Each command in the "commands" array must be a SINGLE command. No shell loops (for/while/do/done), no semicolons, no pipes (|), no command chaining (&&/||), no backticks, no $().
+- If you need to check multiple paths or run multiple variations, put each as a SEPARATE entry in the commands array.
+- Do NOT use -oN/-oX/-oA flags — tool output is captured automatically.
+- Do NOT use shell redirection (>/>>/<) — output is captured automatically.
+- If a tool needs complex arguments, use the tool's built-in flags (e.g., nmap --script, not bash loops).
 
 Respond ONLY with JSON:
 ```json
@@ -409,7 +415,7 @@ Respond ONLY with JSON:
   "strategy": "brief approach",
   "confidence": 0.9,
   "reasoning": "why",
-  "commands": ["exact shell command 1"],
+  "commands": ["exact shell command 1", "exact shell command 2"],
   "skip_reason": "if not needed"
 }}
 ```"""

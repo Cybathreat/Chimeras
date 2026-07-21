@@ -189,18 +189,39 @@ class TargetValidator:
     )
 
     # Patterns to exclude from hostname extraction (not targets)
+    # Patterns to exclude from hostname extraction (not targets)
     NON_TARGET_PATTERNS = {
         # File paths
         re.compile(r'^/'), re.compile(r'^\./'), re.compile(r'^\.\./'),
         # Common flag values that look like domains
-        re.compile(r'^http$', re.IGNORECASE),
-        re.compile(r'^https$', re.IGNORECASE),
+        re.compile(r'^http$', re.IGNORECASE), re.compile(r'^https$', re.IGNORECASE),
         # Tool output flags
         re.compile(r'^-'),
         # Common protocol strings
         re.compile(r'^tcp$', re.IGNORECASE), re.compile(r'^udp$', re.IGNORECASE),
         # File extensions that get matched
         re.compile(r'\.(txt|log|json|xml|html|md|py|sh|conf|cfg)$'),
+        # nmap script-args values (e.g., ssl-cert.timeout=30, vulners.timeout=60)
+        re.compile(r'^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+=[a-zA-Z0-9._-]+$'),
+        # nmap script names (e.g., ssl-cert, ssl-enum-ciphers, vulners)
+        re.compile(r'^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$'),
+        # Common nmap timing/template flags
+        re.compile(r'^T[0-9]$'),
+        # Version strings, output formats
+        re.compile(r'^[A-Z]+$'),  # All-caps tokens like HTTP, HTTPS, OK
+    }
+
+    # nmap flags whose following argument is a value, not a target
+    # These flags take arguments that can look like hostnames (script names, timing, etc.)
+    NMAP_VALUE_FLAGS = {
+        '--script', '--script-args', '--script-args-file', '--script-help',
+        '-sV', '--version-intensity', '--version-light', '--version-all',
+        '-T', '--timing', '--max-retries', '--max-rate', '--min-rate',
+        '-p', '--port-ratio', '--exclude', '--exclude-file',
+        '-oN', '-oX', '-oA', '-oG', '--reason', '--packet-trace',
+        '-e', '--interface', '-S', '--source-ip',
+        '--data-length', '--ttl', '--spoof-mac',
+        '--proxies', '--resolve-all',
     }
 
     def __init__(self, mission_scope: str, internal_scope: Optional[str] = None):
@@ -248,38 +269,67 @@ class TargetValidator:
     def _extract_targets(self, command: str) -> Tuple[List[str], List[str]]:
         """Extract IP addresses and hostnames from a command string.
 
+        v2.1: Properly skips flag arguments (--script, --script-args, -T, etc.)
+        so that values like 'ssl-cert.timeout=30' or 'ssl-enum-ciphers' are
+        not mistaken for hostnames.
+
         Returns:
             (ip_list, hostname_list) — all potential targets found.
         """
         ips = self.IP_REGEX.findall(command)
-        # Filter out IPs that are part of file paths or non-target contexts
-        # (e.g., 127.0.0.1 in "127.0.0.1:8080" is a target, but we keep it)
 
-        hostnames = []
-        for match in self.HOSTNAME_REGEX.findall(command):
-            # Skip if it matches any non-target pattern
-            skip = False
-            for pattern in self.NON_TARGET_PATTERNS:
-                if pattern.search(match):
-                    skip = True
-                    break
-            if skip:
-                continue
-            # Skip if it's actually a flag argument
-            if match.startswith('-'):
-                continue
-            # Skip very short matches (likely false positives)
-            if len(match) < 4:
-                continue
-            # Skip if it's a known tool name
-            all_tools = set()
-            for tools in TOOL_CATEGORIES.values():
-                all_tools |= tools
-            if match.lower() in all_tools:
-                continue
-            hostnames.append(match)
+        # Tokenize the command to skip flag arguments properly
+        try:
+            tokens = shlex.split(command)
+        except Exception:
+            tokens = command.split()
 
-        return ips, hostnames
+        # Build a set of "skip next token" flags
+        skip_next = False
+        candidate_hostnames = []
+        all_tools = set()
+        for tools in TOOL_CATEGORIES.values():
+            all_tools |= tools
+
+        for i, token in enumerate(tokens):
+            # If previous token was a value-flag, skip this token
+            if skip_next:
+                skip_next = False
+                continue
+
+            # Check if this token is a value-flag (next token is a value, not target)
+            if token in self.NMAP_VALUE_FLAGS:
+                skip_next = True
+                continue
+
+            # Skip flags themselves
+            if token.startswith('-'):
+                continue
+
+            # Skip tokens that contain '=' (flag values like key=value)
+            if '=' in token:
+                continue
+
+            # Try to match as hostname
+            matches = self.HOSTNAME_REGEX.findall(token)
+            for match in matches:
+                # Skip if it matches any non-target pattern
+                skip = False
+                for pattern in self.NON_TARGET_PATTERNS:
+                    if pattern.search(match):
+                        skip = True
+                        break
+                if skip:
+                    continue
+                # Skip if it's a known tool name
+                if match.lower() in all_tools:
+                    continue
+                # Skip very short matches
+                if len(match) < 4:
+                    continue
+                candidate_hostnames.append(match)
+
+        return ips, candidate_hostnames
 
     def _is_ip_in_scope(self, ip_str: str) -> bool:
         """Check if an IP address falls within any authorized scope network."""
