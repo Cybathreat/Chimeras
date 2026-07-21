@@ -33,12 +33,28 @@ def parse_scope_from_mission(mission_path: Path) -> str:
     # Find Scope section
     scope_match = re.search(r'## Scope\s*\n(.+?)(?=\n##|\Z)', content, re.DOTALL)
     if scope_match:
-        scope = scope_match.group(1).strip()
-        # Extract first IP or domain
-        ip_match = re.search(r'\d+\.\d+\.\d+\.\d+(/\d+)?', scope)
+        scope_text = scope_match.group(1).strip()
+        # Parse all targets from the scope section — one per line, comma-separated
+        # v2.1: Previously only read the first line, missing additional scope targets
+        targets = []
+        for line in scope_text.split('\n'):
+            line = line.strip()
+            if not line or line.startswith('-'):
+                line = line.lstrip('-').strip()
+            if not line:
+                continue
+            # Handle comma-separated targets on a single line
+            for token in line.split(','):
+                token = token.strip()
+                if token:
+                    targets.append(token)
+        if targets:
+            return ', '.join(targets)
+        # Fallback: extract first IP or domain
+        ip_match = re.search(r'\d+\.\d+\.\d+\.\d+(/\d+)?', scope_text)
         if ip_match:
             return ip_match.group(0)
-        return scope.split('\n')[0]
+        return scope_text.split('\n')[0]
     return ""
 
 
@@ -75,7 +91,8 @@ async def run_operation(mission_dir: Path, swarm_config: dict, auto_approve: boo
         loop_count={},
         max_loops_per_phase=5,        # v2: per-phase, not global
         discovered_targets=[],
-        external_targets=[target_scope] if target_scope else [],
+        # v2.1: Parse scope string into individual targets for external_targets
+        external_targets=[t.strip() for t in target_scope.split(',') if t.strip()] if target_scope else [],
         internal_targets=[],
         exploited_hosts=[],
         target_context="external",    # v2: start in external scope

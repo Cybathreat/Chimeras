@@ -61,6 +61,8 @@ further lateral movement.
         """Update state with recon findings.
 
         v2 Phase 3: Tracks discovered_targets and internal_targets.
+        v2.1: Seeds discovered_targets with the mission scope targets on first run
+              so scope exhaustion doesn't fire when ARIA confirms the scope is valid.
         """
         try:
             self.state["recon_report"] = analysis.get("structured_data", {})
@@ -86,6 +88,19 @@ further lateral movement.
                                 if val and isinstance(val, str):
                                     new_targets.append(val)
                                     break
+
+            # v2.1: Seed discovered_targets with mission scope targets on first run
+            # This prevents scope exhaustion from firing when ARIA confirms the
+            # initial scope is valid (the targets exist and resolve) but hasn't
+            # found NEW subdomains beyond the scope.
+            mission = self.state.get("mission", {})
+            scope_str = mission.get("scope", "")
+            if scope_str:
+                for token in scope_str.replace(",", " ").split():
+                    token = token.strip().lower()
+                    if token and token not in ("any", "*"):
+                        if token not in new_targets:
+                            new_targets.append(token)
 
             # Update discovered_targets (deduplicate)
             discovered = self.state.get("discovered_targets", [])
