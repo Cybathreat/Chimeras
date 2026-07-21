@@ -236,11 +236,14 @@ You MUST output a "decision" field with one of these exact values:
 - If Lisa found only low-value ports (SMTP, DNS) → "recon" for deeper OSINT
 - If Bloodhound found 0 CVEs but config misconfigs → "scan" for deeper scanning
 - If Bloodhound found exploitable vulns → "vulns_found_exploit"
+- If Bloodhound detected WAF → aggressiveness downgraded, use "scan" with passive checks
 - If Surgeon got shell but no privesc viable → "lateral_recon"
+- If Surgeon failed 3+ exploits on same target → "report" or "lateral_recon" (stop retrying)
 - If Thief confirmed data exfil → "report"
 - If 3+ decision cycles with no forward progress → "insufficient_data_abort"
 - If scope exhausted (ARIA ran 2x, zero new targets) → "report" with "scope depleted"
 - If recon found internal network and we have shell → "lateral_recon" (needs approval)
+- If failed_vectors shows repeated failures on same target → pivot or abort
 {state_info}{backtrack_info}{history_info}{scope_info}{loop_info}{agg_info}{failed_info}{confidence_info}
 
 ## Your Task

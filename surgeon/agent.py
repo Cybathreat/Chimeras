@@ -135,6 +135,37 @@ gate has been passed.
 
             self.state["target_artifacts"] = artifacts
 
+            # ─── Track failed exploitation attempts ───
+            failed = self.state.get("failed_vectors", [])
+            if not isinstance(failed, list):
+                failed = []
+
+            for key in ("failed_exploits", "errors", "blocked_attempts"):
+                found = structured.get(key, [])
+                if isinstance(found, list):
+                    for item in found:
+                        if isinstance(item, dict):
+                            failed.append({
+                                "target": item.get("target", item.get("host", "unknown")),
+                                "tool": item.get("tool", self.bot_name),
+                                "error": item.get("error", item.get("reason", "unknown")),
+                                "timestamp": item.get("timestamp", ""),
+                            })
+
+            # Check tool_results for failures
+            for result in tool_results:
+                if isinstance(result, dict) and not result.get("success", True) and not result.get("scope_blocked"):
+                    cmd = result.get("command", "")
+                    tool_name = cmd.split()[0] if cmd else self.bot_name
+                    failed.append({
+                        "target": self.state.get("mission", {}).get("target", "unknown"),
+                        "tool": tool_name,
+                        "error": result.get("stderr", "exploit failed")[:200],
+                        "timestamp": "",
+                    })
+
+            self.state["failed_vectors"] = failed
+
         except Exception as e:
             print(f"[SURGEON] _update_state error: {e}")
             try:

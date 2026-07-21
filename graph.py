@@ -180,6 +180,9 @@ def route_after_vuln(state: SwarmState) -> str:
 def route_after_exploit(state: SwarmState) -> str:
     """Route after Surgeon (exploitation phase).
 
+    v2 Phase 4: If 3+ failed exploitation attempts on the same target,
+    don't retry — pivot to lateral movement or report.
+
     Backtracking rule: no backtrack to scanning after shell within
     external scope. Allowed when context is lateral (Phase 3).
     """
@@ -190,6 +193,15 @@ def route_after_exploit(state: SwarmState) -> str:
 
         decision = state.get("last_decision", "privesc")
         target_context = state.get("target_context", "external")
+
+        # v2 Phase 4: Check if exploitation is failing repeatedly
+        failed = state.get("failed_vectors", [])
+        if isinstance(failed, list):
+            # Count failed exploitation attempts
+            exploit_failures = [f for f in failed if isinstance(f, dict) and f.get("tool", "") in ("msfconsole", "sqlmap", "nc", "python3", "bash")]
+            if len(exploit_failures) >= 3:
+                print(f"[FAILURE] {len(exploit_failures)} failed exploitation attempts — pivoting")
+                return "bookkeeper"
 
         if decision == "privesc":
             return "magician"
@@ -307,6 +319,19 @@ def _unified_router(state: SwarmState) -> str:
         # Init phase — always start with recon
         if phase == "init" or not decision:
             return "aria"
+
+        # v2 Phase 4: Graceful abort — 3+ decision cycles with no forward progress
+        history = state.get("decision_history", [])
+        if isinstance(history, list) and len(history) >= 3:
+            # Check last 3 decisions — if all the same and not making progress
+            last_3 = history[-3:]
+            decisions_3 = [h.get("decision", "") for h in last_3 if isinstance(h, dict)]
+            if len(decisions_3) == 3 and len(set(decisions_3)) == 1:
+                # Same decision 3 times in a row — stuck
+                stuck_decision = decisions_3[0]
+                if stuck_decision not in ("report", "insufficient_data_abort"):
+                    print(f"[NO PROGRESS] Same decision '{stuck_decision}' 3 times — forcing abort to report")
+                    return "bookkeeper"
 
         # Explicit report/abort — always go to bookkeeper
         if decision in ("report", "insufficient_data_abort"):
