@@ -191,6 +191,58 @@ class BaseBot(ABC):
 
     # ─── Tool execution ───
 
+    def _capture_scope_candidate(self, command: str, reason: str) -> None:
+        """v2.1: Capture out-of-scope targets for scope expansion debrief.
+
+        When a bot tries to target something outside the mission scope, extract
+        the target from the reason string and add it to scope_expansion_candidates.
+        WarChief will later debrief the user and ask whether to add them to scope.
+        """
+        try:
+            import re as _re
+            # Extract target from reason: "TARGET OUT OF SCOPE: hostname 'X' is not..."
+            # or "TARGET OUT OF SCOPE: IP X is not..."
+            host_match = _re.search(r"hostname '([^']+)'", reason)
+            ip_match = _re.search(r"IP (\S+) is not", reason)
+
+            target = None
+            if host_match:
+                target = host_match.group(1)
+            elif ip_match:
+                target = ip_match.group(1)
+
+            if not target:
+                return
+
+            # Skip AWS metadata IPs, localhost, and private IPs — these are never scope candidates
+            if target in ("169.254.169.254", "127.0.0.1", "localhost"):
+                return
+            if target.startswith(("10.", "172.16.", "172.17.", "172.18.", "172.19.",
+                                   "172.20.", "172.21.", "172.22.", "172.23.", "172.24.",
+                                   "172.25.", "172.26.", "172.27.", "172.28.", "172.29.",
+                                   "172.30.", "172.31.", "192.168.")):
+                return
+
+            candidates = self.state.get("scope_expansion_candidates", [])
+            if not isinstance(candidates, list):
+                candidates = []
+
+            # Don't add duplicates
+            existing_targets = {c.get("target") for c in candidates if isinstance(c, dict)}
+            approved = set(self.state.get("approved_extra_targets", []))
+            if target not in existing_targets and target not in approved:
+                candidates.append({
+                    "target": target,
+                    "found_by": self.bot_name,
+                    "command": command[:200],
+                    "reason": reason,
+                    "timestamp": datetime.utcnow().isoformat(),
+                })
+                self.state["scope_expansion_candidates"] = candidates
+                self._log(f"Captured scope candidate: {target}", "SCOPE")
+        except Exception as e:
+            print(f"[{self.bot_name.upper()}] Scope candidate capture error: {e}")
+
     def _run_tool(self, command: str, timeout: Optional[int] = None) -> Dict[str, Any]:
         """
         Execute a Kali tool. Scope-enforced. Real subprocess.
@@ -198,18 +250,27 @@ class BaseBot(ABC):
 
         v2: Scope enforcement now includes shell injection check, tool
         category check, and target/CIDR validation — all at code level.
+        v2.1: Out-of-scope targets captured for scope expansion debrief.
         """
         # v2: Full scope enforcement with target validation
         mission = self.state.get("mission", {})
         mission_scope = mission.get("scope", "")
+        # v2.1: Include approved extra targets in scope check
+        approved_extra = self.state.get("approved_extra_targets", [])
+        full_scope = mission_scope
+        if approved_extra:
+            full_scope = ", ".join([mission_scope] + approved_extra) if mission_scope else ", ".join(approved_extra)
         internal_scope = self.state.get("internal_scope", "")
         allowed, reason = ScopeEnforcer.check(
             self.bot_name, command,
-            mission_scope=mission_scope or None,
+            mission_scope=full_scope or None,
             internal_scope=internal_scope or None,
         )
         if not allowed:
             self._log(f"SCOPE BLOCKED: {reason}", "SCOPE")
+            # v2.1: Capture out-of-scope targets for scope expansion debrief
+            if "TARGET OUT OF SCOPE" in reason:
+                self._capture_scope_candidate(command, reason)
             return {
                 "command": command,
                 "exit_code": -2,

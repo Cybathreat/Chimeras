@@ -320,6 +320,19 @@ def _unified_router(state: SwarmState) -> str:
         if phase == "init" or not decision:
             return "aria"
 
+        # v2.1: Scope expansion gate — if bots discovered out-of-scope targets,
+        # route to scope_expansion before proceeding with the actual routing.
+        # The scope_expansion node presents candidates to the user, then routes
+        # back to warchief for the real routing decision.
+        candidates = state.get("scope_expansion_candidates", [])
+        if isinstance(candidates, list) and candidates:
+            # Check if there are any candidates not already approved
+            approved = set(state.get("approved_extra_targets", []))
+            new_candidates = [c for c in candidates
+                              if isinstance(c, dict) and c.get("target") not in approved]
+            if new_candidates:
+                return "scope_expansion"
+
         # v2 Phase 4: Graceful abort — 3+ decision cycles with no forward progress
         history = state.get("decision_history", [])
         if isinstance(history, list) and len(history) >= 3:
@@ -521,6 +534,103 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
             state["lateral_approval"] = False
         return state
 
+    def scope_expansion_node(state: SwarmState) -> SwarmState:
+        """v2.1: Scope expansion gate — debrief user about out-of-scope targets.
+
+        When bots discover targets outside the mission scope (e.g., third-party
+        dependencies like Prismic CMS), WarChief collects them and presents a
+        debrief to the user. The user decides which targets to add to scope.
+
+        On auto_approve: all candidates are added silently.
+        On EOFError/OSError: no candidates added (fail safe).
+        """
+        try:
+            candidates = state.get("scope_expansion_candidates", [])
+            if not candidates:
+                return state
+
+            # Filter out already-approved targets
+            approved = set(state.get("approved_extra_targets", []))
+            new_candidates = [c for c in candidates
+                              if isinstance(c, dict) and c.get("target") not in approved]
+            if not new_candidates:
+                return state
+
+            print("\n" + "=" * 60)
+            print("SCOPE EXPANSION REQUEST — NEW TARGETS DISCOVERED")
+            print("=" * 60)
+            print(f"WarChief discovered {len(new_candidates)} target(s) outside the")
+            print("current mission scope during the engagement.")
+            print()
+            for i, c in enumerate(new_candidates, 1):
+                target = c.get("target", "?")
+                found_by = c.get("found_by", "?")
+                reason = c.get("reason", "")
+                # Truncate reason for display
+                if len(reason) > 100:
+                    reason = reason[:100] + "..."
+                print(f"  {i}. {target}")
+                print(f"     Found by: {found_by}")
+                print(f"     Reason: {reason}")
+                print()
+
+            if auto_approve:
+                print("AUTO-APPROVED (--approve flag) — adding all candidates to scope\n")
+                for c in new_candidates:
+                    target = c.get("target", "")
+                    if target and target not in approved:
+                        approved.add(target)
+                state["approved_extra_targets"] = list(approved)
+                # Clear candidates after processing
+                state["scope_expansion_candidates"] = []
+                return state
+
+            print("Options:")
+            print("  - Type a number (e.g., '1') to approve that target")
+            print("  - Type 'all' to approve all targets")
+            print("  - Type 'none' or press Enter to reject all")
+            print("=" * 60)
+
+            try:
+                response = input("\nAdd which targets to scope? ").strip().lower()
+            except (EOFError, OSError):
+                response = "none"
+
+            if response == "none" or response == "":
+                print("\nNo targets added to scope.\n")
+            elif response == "all":
+                print("\nAll targets APPROVED — adding to scope\n")
+                for c in new_candidates:
+                    target = c.get("target", "")
+                    if target and target not in approved:
+                        approved.add(target)
+            else:
+                # Parse comma-separated numbers
+                approved_any = False
+                for part in response.split(","):
+                    part = part.strip()
+                    try:
+                        idx = int(part) - 1
+                        if 0 <= idx < len(new_candidates):
+                            target = new_candidates[idx].get("target", "")
+                            if target and target not in approved:
+                                approved.add(target)
+                                approved_any = True
+                                print(f"  APPROVED: {target}")
+                    except ValueError:
+                        pass
+                if approved_any:
+                    print("\nSelected targets added to scope.\n")
+                else:
+                    print("\nNo valid selections — no targets added.\n")
+
+            state["approved_extra_targets"] = list(approved)
+            # Clear candidates after processing
+            state["scope_expansion_candidates"] = []
+        except Exception as e:
+            print(f"[SCOPE EXPANSION ERROR] {e} — no targets added")
+        return state
+
     async def pathologist_node(state: SwarmState) -> SwarmState:
         """Pathologist — payload fabrication. On failure: logged, graph continues."""
         try:
@@ -602,6 +712,7 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
     workflow.add_node("bloodhound", bloodhound_node)
     workflow.add_node("human_approval", human_approval_node)
     workflow.add_node("lateral_approval", lateral_approval_node)
+    workflow.add_node("scope_expansion", scope_expansion_node)
     workflow.add_node("pathologist", pathologist_node)
     workflow.add_node("surgeon", surgeon_node)
     workflow.add_node("magician", magician_node)
@@ -635,9 +746,13 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
             "magician": "magician",
             "thief": "thief",
             "lateral_approval": "lateral_approval",
+            "scope_expansion": "scope_expansion",
             "bookkeeper": "bookkeeper",
         },
     )
+
+    # Scope expansion → back to WarChief (after user decision, WarChief routes normally)
+    workflow.add_edge("scope_expansion", "warchief")
 
     # Human approval → Pathologist (approved) or Bookkeeper (denied)
     workflow.add_conditional_edges(

@@ -148,3 +148,14 @@ class SwarmState(TypedDict, total=False):
     # Internal network scope (CIDR/hostname) approved via lateral_approval gate.
     # ToolExecutor uses this for target validation when target_context="lateral".
     internal_scope: str
+
+    # ─── v2.1: Scope expansion candidates ───
+    # Out-of-scope targets discovered during the engagement (e.g., third-party
+    # dependencies like Prismic CMS, AWS metadata IPs). When a bot's command is
+    # scope-blocked because it targets something outside the mission scope, the
+    # target is added here. WarChief debriefs the user and asks whether to add
+    # them to scope. Each entry: {"target": str, "found_by": str, "reason": str}
+    scope_expansion_candidates: List[Dict[str, Any]]
+
+    # Targets the user has approved for scope expansion (added to mission scope)
+    approved_extra_targets: List[str]

@@ -104,6 +104,9 @@ async def run_operation(mission_dir: Path, swarm_config: dict, auto_approve: boo
         mission_state="init",           # State machine position
         scope_exhausted=False,          # Set when recon finds zero new targets
         confidence_threshold=0.6,       # Minimum confidence for routing
+        # v2.1: Scope expansion
+        scope_expansion_candidates=[],
+        approved_extra_targets=[],
     )
 
     # v2 Phase 3: Store internal scope in state for ToolExecutor target validation
