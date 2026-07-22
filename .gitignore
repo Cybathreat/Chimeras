@@ -23,6 +23,7 @@ env/
 
 # Mission workspaces (per-operation data)
 mission_*/
+mission/
 !mission_*/swarm-config.json
 
 # Engagement artifacts
