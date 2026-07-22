@@ -26,6 +26,7 @@ VALID_DECISIONS = {
     "init":              "Initial planning — no prior work exists",
     "recon":             "Route to ARIA for passive reconnaissance",
     "scan":              "Route to Lisa for active scanning",
+    "vuln_detection":    "Route to Bloodhound for vulnerability detection",
     "vulns_found_exploit": "Exploitable vulns found — route to human approval gate",
     "insufficient_data_abort": "Not enough data to continue — abort to report",
     "lateral_recon":     "Pivot to lateral recon (internal network) — requires lateral_approval gate",

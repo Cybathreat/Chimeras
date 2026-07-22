@@ -109,6 +109,8 @@ def route_after_recon(state: SwarmState) -> str:
 
         if decision == "scan":
             return "lisa"
+        elif decision == "vuln_detection":
+            return "bloodhound"
         elif decision == "recon":
             return "aria"
         elif decision in ("report", "insufficient_data_abort"):
@@ -134,7 +136,18 @@ def route_after_scan(state: SwarmState) -> str:
 
         if decision == "vulns_found_exploit":
             return "bloodhound"
+        elif decision == "vuln_detection":
+            return "bloodhound"
         elif decision == "scan":
+            # If scan has run 2+ cycles, force advance to Bloodhound
+            # WarChief keeps saying "scan" when it means "advance to vuln detection"
+            loop_count = state.get("loop_count", {})
+            if not isinstance(loop_count, dict):
+                loop_count = {}
+            scan_cycles = loop_count.get("scan", 0)
+            if scan_cycles >= 2:
+                print(f"[FORCED ADVANCE] Scan ran {scan_cycles} cycles — forcing Bloodhound")
+                return "bloodhound"
             return "lisa"
         elif decision == "recon":
             return "aria"
@@ -396,6 +409,7 @@ def _unified_router(state: SwarmState) -> str:
         forward_map = {
             "recon": "aria",
             "scan": "lisa",
+            "vuln_detection": "bloodhound",
             "vulns_found_exploit": "human_approval",
             "continue_exploit": "surgeon",
             "privesc": "magician",
