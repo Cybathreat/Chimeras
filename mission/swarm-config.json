@@ -1,0 +1,58 @@
+{
+  "version": "2.0",
+  "created": "2026-07-22T22:54:27.912929",
+  "mission_name": "Raksha TN Pentest Run 5",
+  "bots": {
+    "warchief": {
+      "provider": "openai",
+      "model": "glm-5.2",
+      "base_url": "https://ollama.com/v1"
+    },
+    "aria": {
+      "provider": "openai",
+      "model": "glm-5.2",
+      "base_url": "https://ollama.com/v1"
+    },
+    "lisa": {
+      "provider": "openai",
+      "model": "glm-5.2",
+      "base_url": "https://ollama.com/v1"
+    },
+    "bloodhound": {
+      "provider": "openai",
+      "model": "glm-5.2",
+      "base_url": "https://ollama.com/v1"
+    },
+    "surgeon": {
+      "provider": "openai",
+      "model": "glm-5.2",
+      "base_url": "https://ollama.com/v1"
+    },
+    "pathologist": {
+      "provider": "openai",
+      "model": "glm-5.2",
+      "base_url": "https://ollama.com/v1"
+    },
+    "thief": {
+      "provider": "openai",
+      "model": "glm-5.2",
+      "base_url": "https://ollama.com/v1"
+    },
+    "magician": {
+      "provider": "openai",
+      "model": "glm-5.2",
+      "base_url": "https://ollama.com/v1"
+    },
+    "bookkeeper": {
+      "provider": "openai",
+      "model": "glm-5.2",
+      "base_url": "https://ollama.com/v1"
+    }
+  },
+  "fallback_chain": [
+    "ollama"
+  ],
+  "human_approval_required": true,
+  "max_loops_per_phase": 5,
+  "default_aggressiveness": "cautious"
+}

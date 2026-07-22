@@ -252,7 +252,7 @@ class TargetValidator:
         """
         if not scope:
             return
-        for token in re.split(r'[,\n]', scope.strip()):
+        for token in re.split(r'[,\n\s]+', scope.strip()):
             token = token.strip()
             if not token:
                 continue

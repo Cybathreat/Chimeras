@@ -351,15 +351,20 @@ def _unified_router(state: SwarmState) -> str:
                 return "scope_expansion"
 
         # v2 Phase 4: Graceful abort — 3+ decision cycles with no forward progress
+        # Only applies to exploitation/post-exploit phases. Recon and scan have
+        # their own _check_loop_limit guards — WarChief can wake multiple times
+        # before a bot actually runs, causing false positives on "scan"/"recon".
         history = state.get("decision_history", [])
         if isinstance(history, list) and len(history) >= 3:
             # Check last 3 decisions — if all the same and not making progress
             last_3 = history[-3:]
             decisions_3 = [h.get("decision", "") for h in last_3 if isinstance(h, dict)]
             if len(decisions_3) == 3 and len(set(decisions_3)) == 1:
-                # Same decision 3 times in a row — stuck
                 stuck_decision = decisions_3[0]
-                if stuck_decision not in ("report", "insufficient_data_abort"):
+                # Only force abort for exploitation/post-exploit stuck decisions
+                # recon/scan loopback is legitimate and guarded by _check_loop_limit
+                if stuck_decision in ("exploit", "privesc", "exfil",
+                                      "vulns_found_exploit", "continue_exploit"):
                     print(f"[NO PROGRESS] Same decision '{stuck_decision}' 3 times — forcing abort to report")
                     return "bookkeeper"
 
