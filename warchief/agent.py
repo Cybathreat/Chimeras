@@ -270,8 +270,7 @@ Respond ONLY with a JSON block:
   "decision": "one of the valid routing decisions above",
   "assessment": "brief summary of current engagement state",
   "updated_plan": "markdown plan update for plan.md — include what was done and what's next",
-  "mission_phase": "init/recon/scanning/vuln_detection/exploitation/post_exploit/lateral_recon/lateral_scanning/reporting/complete",
-  "loop_count_update": {{"phase_name": 1}}
+  "mission_phase": "init/recon/scanning/vuln_detection/exploitation/post_exploit/lateral_recon/lateral_scanning/reporting/complete"
 }}
 ```
 No other text. Just the JSON."""
@@ -372,18 +371,10 @@ If you are unsure, default to "scan" to gather more data, or "report" if scope i
             # Also store phase in mission dict for graph routing compatibility
             self.state.setdefault("mission", {})["phase"] = self.state["mission_state"]
 
-            # ─── Update loop count ───
-            loop_update = decision.get("loop_count_update", {})
-            if loop_update and isinstance(loop_update, dict):
-                current_loops = self.state.get("loop_count", {})
-                if not isinstance(current_loops, dict):
-                    current_loops = {}
-                for phase, increment in loop_update.items():
-                    try:
-                        current_loops[phase] = current_loops.get(phase, 0) + int(increment)
-                    except (ValueError, TypeError):
-                        pass  # Bad increment value — skip
-                self.state["loop_count"] = current_loops
+            # ─── Loop count updated by graph nodes, not by LLM ───
+            # v2.1: Loop counters are incremented in graph.py node functions
+            # (aria_node, lisa_node, etc.) when the bot actually executes.
+            # WarChief no longer relies on LLM returning loop_count_update.
 
             # ─── Update decision history (rolling window) ───
             history = self.state.get("decision_history", [])

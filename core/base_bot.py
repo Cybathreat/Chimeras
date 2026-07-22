@@ -187,6 +187,19 @@ class BaseBot(ABC):
         except json.JSONDecodeError:
             pass
 
+        # v2.1: Check if response was truncated (starts with { but no closing })
+        # This happens when max_tokens is hit mid-JSON. Log clearly, don't crash.
+        stripped_response = stripped if stripped.startswith('{') else response
+        if '{' in stripped_response:
+            open_braces = stripped_response.count('{')
+            close_braces = stripped_response.count('}')
+            if open_braces > close_braces:
+                raise ValueError(
+                    f"LLM response appears truncated (open braces: {open_braces}, "
+                    f"close braces: {close_braces}). Likely max_tokens limit hit. "
+                    f"Response starts: {response[:200]}..."
+                )
+
         raise ValueError(f"Could not parse JSON from LLM response: {response[:300]}...")
 
     # ─── Tool execution ───

@@ -17,12 +17,33 @@ import asyncio
 import argparse
 import json
 import re
+import shutil
 from pathlib import Path
 from datetime import datetime
 
 from core.config import ConfigManager
 from core.state import SwarmState
 from graph import compile_graph
+
+
+def _clean_engagement_dir(engagement_dir: Path) -> None:
+    """Remove all contents of the engagement directory for a fresh run.
+
+    Keeps the directory itself, recreates standard subdirs.
+    """
+    if engagement_dir.exists():
+        for item in engagement_dir.iterdir():
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()
+    else:
+        engagement_dir.mkdir(parents=True, exist_ok=True)
+    # Recreate standard subdirectories
+    (engagement_dir / "raw").mkdir(exist_ok=True)
+    (engagement_dir / "report").mkdir(exist_ok=True)
+    (engagement_dir / "poc").mkdir(exist_ok=True)
+    (engagement_dir / "findings").mkdir(exist_ok=True)
 
 
 def parse_scope_from_mission(mission_path: Path) -> str:
@@ -58,11 +79,16 @@ def parse_scope_from_mission(mission_path: Path) -> str:
     return ""
 
 
-async def run_operation(mission_dir: Path, swarm_config: dict, auto_approve: bool = False) -> SwarmState:
+async def run_operation(mission_dir: Path, swarm_config: dict, auto_approve: bool = False, resume: bool = False) -> SwarmState:
     """Execute a full Chimeras operation."""
 
     engagement_dir = mission_dir / "engagement"
     mission_path = mission_dir / "mission.md"
+
+    # v2.1: Clean engagement dir for fresh run unless --resume is specified
+    # Previous runs leave stale files that poison WarChief's context
+    if not resume:
+        _clean_engagement_dir(engagement_dir)
 
     # Parse scope from mission file
     target_scope = parse_scope_from_mission(mission_path)
@@ -169,6 +195,8 @@ Examples:
     run_parser.add_argument("--mission-dir", "-d", default="mission", help="Mission directory")
     run_parser.add_argument("--config", "-c", help="Custom swarm-config.json")
     run_parser.add_argument("--approve", action="store_true", help="Auto-approve exploitation + lateral gates")
+    run_parser.add_argument("--resume", action="store_true",
+                            help="Resume from existing engagement files (skip cleanup)")
     run_parser.add_argument("--skip-wizard", action="store_true",
                             help="Skip TUI wizard, use config as-is (for headless runs)")
 
@@ -210,7 +238,7 @@ Examples:
                 return
             swarm_config = verified_config
 
-        asyncio.run(run_operation(mission_dir, swarm_config, args.approve))
+        asyncio.run(run_operation(mission_dir, swarm_config, args.approve, args.resume))
 
     elif args.command == "status":
         mission_dir = Path(args.mission_dir)
@@ -261,7 +289,7 @@ Examples:
             mission_dir = Path("mission")
             config_path = mission_dir / "swarm-config.json"
             if config_path.exists():
-                asyncio.run(run_operation(mission_dir, config, auto_approve=False))
+                asyncio.run(run_operation(mission_dir, config, auto_approve=False, resume=False))
             else:
                 console.print("  [red]No mission directory found. Run 'python main.py setup' first.[/red]")
 

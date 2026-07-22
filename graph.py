@@ -305,19 +305,36 @@ def route_after_lateral_approval(state: SwarmState) -> str:
 def _unified_router(state: SwarmState) -> str:
     """Unified WarChief routing function.
 
-    Determines the next node based on mission phase and last_decision.
-    This is the single conditional edge from WarChief — it dispatches
-    to phase-specific routing functions based on state["mission"]["phase"].
+    Determines the next node based on the last bot that actually ran and
+    WarChief's routing decision. This is the single conditional edge from
+    WarChief — it dispatches to phase-specific routing functions.
 
-    Fallback: any unknown phase or decision routes to Bookkeeper (safe).
+    v2.1: Uses last_bot from reasoning_reports instead of mission.phase.
+    WarChief's LLM sets mission_phase to where it WANTS to go, not where
+    the engagement IS. This caused Bloodhound to be skipped (WarChief set
+    phase=vuln_detection before Bloodhound ran, so the router called
+    route_after_vuln which routes to human_approval, skipping Bloodhound).
+
+    Fallback: any unknown state routes to Bookkeeper (safe).
     """
     try:
         decision = state.get("last_decision", "")
-        mission = state.get("mission", {})
-        phase = mission.get("phase", "init") if isinstance(mission, dict) else "init"
+
+        # Determine which bot ran last (most recent entry in reasoning_reports)
+        reasoning_reports = state.get("reasoning_reports", {})
+        if not isinstance(reasoning_reports, dict):
+            reasoning_reports = {}
+        bot_order = ["warchief", "aria", "lisa", "bloodhound",
+                     "pathologist", "surgeon", "magician", "thief"]
+        # Find the last non-warchief bot that ran
+        last_bot = "warchief"
+        for bot in reversed(bot_order):
+            if bot in reasoning_reports and bot != "warchief":
+                last_bot = bot
+                break
 
         # Init phase — always start with recon
-        if phase == "init" or not decision:
+        if last_bot == "warchief" and not decision:
             return "aria"
 
         # v2.1: Scope expansion gate — if bots discovered out-of-scope targets,
@@ -354,24 +371,23 @@ def _unified_router(state: SwarmState) -> str:
         if decision in ("lateral_recon", "lateral_scan"):
             return "lateral_approval"
 
-        # Phase-specific routing
-        phase_routers = {
-            "recon": route_after_recon,
-            "scanning": route_after_scan,
-            "vuln_detection": route_after_vuln,
-            "exploitation": route_after_exploit,
-            "post_exploit": route_after_privesc,
-            "reporting": lambda s: "bookkeeper",
-            "lateral_recon": route_after_recon,
-            "lateral_scanning": route_after_scan,
+        # Phase-specific routing based on last bot that actually ran
+        bot_routers = {
+            "aria": route_after_recon,
+            "lisa": route_after_scan,
+            "bloodhound": route_after_vuln,
+            "pathologist": route_after_exploit,
+            "surgeon": route_after_exploit,
+            "magician": route_after_privesc,
+            "thief": lambda s: "bookkeeper",
         }
 
-        router_fn = phase_routers.get(phase)
+        router_fn = bot_routers.get(last_bot)
         if router_fn:
             return router_fn(state)
 
-        # Unknown phase — try forward progress based on decision
-        print(f"[ROUTING] Unknown phase '{phase}' with decision '{decision}' — trying forward progress")
+        # Unknown last_bot — try forward progress based on decision
+        print(f"[ROUTING] Unknown last_bot '{last_bot}' with decision '{decision}' — trying forward progress")
         forward_map = {
             "recon": "aria",
             "scan": "lisa",
@@ -421,6 +437,7 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
     async def aria_node(state: SwarmState) -> SwarmState:
         """ARIA — passive reconnaissance. On failure: WarChief reroutes."""
         try:
+            _increment_loop(state, "recon")
             bot = ARIA(state, swarm_config)
             await bot.run()
         except Exception as e:
@@ -431,6 +448,7 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
     async def lisa_node(state: SwarmState) -> SwarmState:
         """Lisa — active scanning. On failure: WarChief reroutes."""
         try:
+            _increment_loop(state, "scan")
             bot = Lisa(state, swarm_config)
             await bot.run()
         except Exception as e:
@@ -441,6 +459,7 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
     async def bloodhound_node(state: SwarmState) -> SwarmState:
         """Bloodhound — vulnerability detection. On failure: WarChief reroutes."""
         try:
+            _increment_loop(state, "vuln")
             bot = Bloodhound(state, swarm_config)
             await bot.run()
         except Exception as e:
