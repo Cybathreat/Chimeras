@@ -28,6 +28,7 @@ VALID_DECISIONS = {
     "scan":              "Route to Lisa for active scanning",
     "vuln_detection":    "Route to Bloodhound for vulnerability detection",
     "vulns_found_exploit": "Exploitable vulns found — route to human approval gate",
+    "web_exploit":       "Route to Wasp for web application exploitation",
     "insufficient_data_abort": "Not enough data to continue — abort to report",
     "lateral_recon":     "Pivot to lateral recon (internal network) — requires lateral_approval gate",
     "lateral_scan":      "Pivot to lateral scanning — requires lateral_approval gate",

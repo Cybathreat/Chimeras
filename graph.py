@@ -8,9 +8,10 @@ v2 flow (adaptive loop — WarChief re-enters after each phase):
     → Lisa (scan)  → WarChief (route) → {ARIA, Lisa, Bloodhound, Bookkeeper}
     → Bloodhound (vuln) → WarChief (route) → {ARIA, Lisa, Human Gate, Bookkeeper}
     → [HUMAN APPROVAL]
-    → Pathologist → Surgeon → WarChief (route) → {Surgeon, Magician, Bookkeeper}
-    → Magician → WarChief (route) → {Surgeon, Thief, Bookkeeper}
-    → Thief → WarChief (route) → {Surgeon, Thief, Bookkeeper}
+    → Wasp (web exploit) → WarChief (route) → {Wasp, Surgeon, Magician, Bookkeeper}
+    → Pathologist → Surgeon → WarChief (route) → {Surgeon, Wasp, Magician, Bookkeeper}
+    → Magician → WarChief (route) → {Surgeon, Wasp, Thief, Bookkeeper}
+    → Thief → WarChief (route) → {Surgeon, Wasp, Thief, Bookkeeper}
     → Bookkeeper → END
 
   Lateral: WarChief 'lateral_recon'/'lateral_scan' → lateral_approval gate
@@ -34,6 +35,7 @@ from aria.agent import ARIA
 from lisa.agent import Lisa
 from bloodhound.agent import Bloodhound
 from surgeon.agent import Surgeon
+from wasp.agent import Wasp
 from pathologist.agent import Pathologist
 from thief.agent import Thief
 from magician.agent import Magician
@@ -173,6 +175,8 @@ def route_after_vuln(state: SwarmState) -> str:
         decision = state.get("last_decision", "vulns_found_exploit")
 
         if decision == "vulns_found_exploit":
+            return "human_approval"
+        elif decision == "web_exploit":
             return "human_approval"
         elif decision == "scan":
             return "lisa"
@@ -338,7 +342,7 @@ def _unified_router(state: SwarmState) -> str:
         if not isinstance(reasoning_reports, dict):
             reasoning_reports = {}
         bot_order = ["warchief", "aria", "lisa", "bloodhound",
-                     "pathologist", "surgeon", "magician", "thief"]
+                     "pathologist", "surgeon", "wasp", "magician", "thief"]
         # Find the last non-warchief bot that ran
         last_bot = "warchief"
         for bot in reversed(bot_order):
@@ -396,6 +400,7 @@ def _unified_router(state: SwarmState) -> str:
             "bloodhound": route_after_vuln,
             "pathologist": route_after_exploit,
             "surgeon": route_after_exploit,
+            "wasp": route_after_exploit,
             "magician": route_after_privesc,
             "thief": lambda s: "bookkeeper",
         }
@@ -411,6 +416,7 @@ def _unified_router(state: SwarmState) -> str:
             "scan": "lisa",
             "vuln_detection": "bloodhound",
             "vulns_found_exploit": "human_approval",
+            "web_exploit": "wasp",
             "continue_exploit": "surgeon",
             "privesc": "magician",
             "exfiltrate": "thief",
@@ -689,6 +695,16 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
             _log_error(state, "SURGEON", e)
         return state
 
+    async def wasp_node(state: SwarmState) -> SwarmState:
+        """Wasp — web application exploitation. On failure: WarChief reroutes."""
+        try:
+            bot = Wasp(state, swarm_config)
+            await bot.run()
+        except Exception as e:
+            print(f"[WASP ERROR] {e}")
+            _log_error(state, "WASP", e)
+        return state
+
     async def magician_node(state: SwarmState) -> SwarmState:
         """Magician — privilege escalation. On failure: WarChief reroutes."""
         try:
@@ -753,6 +769,7 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
     workflow.add_node("scope_expansion", scope_expansion_node)
     workflow.add_node("pathologist", pathologist_node)
     workflow.add_node("surgeon", surgeon_node)
+    workflow.add_node("wasp", wasp_node)
     workflow.add_node("magician", magician_node)
     workflow.add_node("thief", thief_node)
     workflow.add_node("bookkeeper", bookkeeper_node)
@@ -767,6 +784,7 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
     workflow.add_edge("lisa", "warchief")
     workflow.add_edge("bloodhound", "warchief")
     workflow.add_edge("surgeon", "warchief")
+    workflow.add_edge("wasp", "warchief")
     workflow.add_edge("magician", "warchief")
     workflow.add_edge("thief", "warchief")
 
@@ -781,6 +799,7 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
             "human_approval": "human_approval",
             "pathologist": "pathologist",
             "surgeon": "surgeon",
+            "wasp": "wasp",
             "magician": "magician",
             "thief": "thief",
             "lateral_approval": "lateral_approval",
@@ -792,11 +811,19 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
     # Scope expansion → back to WarChief (after user decision, WarChief routes normally)
     workflow.add_edge("scope_expansion", "warchief")
 
-    # Human approval → Pathologist (approved) or Bookkeeper (denied)
+    # Human approval → Pathologist/Surgeon (network) or Wasp (web) or Bookkeeper (denied)
+    def _route_after_approval(state: SwarmState) -> str:
+        if not state.get("human_approval"):
+            return "bookkeeper"
+        decision = state.get("last_decision", "")
+        if decision == "web_exploit":
+            return "wasp"
+        return "pathologist"
+
     workflow.add_conditional_edges(
         "human_approval",
-        lambda state: "pathologist" if state.get("human_approval") else "bookkeeper",
-        {"pathologist": "pathologist", "bookkeeper": "bookkeeper"},
+        _route_after_approval,
+        {"pathologist": "pathologist", "wasp": "wasp", "bookkeeper": "bookkeeper"},
     )
 
     # Pathologist → Surgeon (linear within exploitation phase)

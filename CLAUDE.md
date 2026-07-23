@@ -51,6 +51,7 @@ Bots declare a category in `core/scope.py` (`BOT_CATEGORIES`):
 - Bloodhound → `vuln_detection` (nuclei, searchsploit, wapiti, ssh-audit, sslscan, ...)
 - Pathologist → `payload_fab` (msfvenom, msfconsole, searchsploit, curl)
 - Surgeon → `exploitation` (msfconsole, sqlmap, nc, python3, bash, ...)
+- Wasp → `web_exploit` (sqlmap, nikto, nuclei, curl, ffuf, wfuzz, dalfox, commix, ...)
 - Magician → `privesc` (linpeas, find, cat, ssh, smbclient, ...)
 - Thief → `exfiltration` (curl, wget, nc, tar, scp, rsync, ...)
 - WarChief/Bookkeeper → `none` (no tool execution)
@@ -99,6 +100,7 @@ Chimeras/
 │   ├── aria/agent.py     # Passive recon + lateral recon substrat
 │   ├── lisa/agent.py     # Active scanning + lateral scan mode
 │   ├── bloodhound/agent.py  # Vuln detection + WAF/IPS detection + failed vector tracking
+│   ├── wasp/agent.py     # Web app exploitation (XSS, CSRF, SQLi, file upload, SSTI, SSRF, etc.)
 │   ├── pathologist/agent.py # Payload fabrication
 │   ├── surgeon/agent.py  # Exploitation + lateral exploitation + failed vector tracking + artifact tracking
 │   ├── magician/agent.py # Privesc + lateral movement + artifact tracking

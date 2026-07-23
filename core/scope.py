@@ -53,6 +53,11 @@ TOOL_CATEGORIES: Dict[str, Set[str]] = {
         "msfconsole", "msfvenom", "sqlmap", "curl",
         "nc", "ncat", "python3", "bash", "exploit",
     },
+    "web_exploit": {
+        "sqlmap", "nikto", "nuclei", "curl", "python3",
+        "ffuf", "wfuzz", "dalfox", "commix",
+        "gobuster", "whatweb", "nmap", "httpx",
+    },
     "privesc": {
         "linpeas", "winpeas", "pspy", "find", "cat", "ls",
         "python3", "bash", "ssh", "smbclient", "crackmapexec",
@@ -75,6 +80,7 @@ BOT_CATEGORIES: Dict[str, str] = {
     "bloodhound": "vuln_detection",
     "pathologist": "payload_fab",
     "surgeon": "exploitation",
+    "wasp": "web_exploit",
     "magician": "privesc",
     "thief": "exfiltration",
     "bookkeeper": "none",
