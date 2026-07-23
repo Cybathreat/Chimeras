@@ -1,26 +1,28 @@
 """
 Chimeras v2.0 — Wasp Agent
 
-Web application pentesting specialist. Executes web-layer exploitation
-after Bloodhound identifies web vulnerabilities.
+Web application vulnerability detection specialist. Runs in parallel
+with Bloodhound to cover web-layer vulnerabilities that Bloodhound misses.
 Scope: sqlmap, nikto, nuclei, curl, python3, ffuf, wfuzz, dalfox, commix,
-       gobuster, whatweb, nmap
+       gobuster, whatweb, nmap, httpx
+
+Wasp is a DETECTION bot — it finds and proves web vulnerabilities exist
+but does not exploit them for shell access. It runs WITHOUT human approval
+because it's detection, not exploitation. Surgeon/Wasp-exploitation mode
+handles active exploitation after human gate.
 
 Specializations:
-  - XSS (reflected, stored, DOM-based)
-  - CSRF (token analysis, bypass attempts)
-  - SQL injection (error-based, blind, time-based, UNION)
-  - File upload bypass
-  - SSTI (Server-Side Template Injection)
-  - SSRF (Server-Side Request Forgery)
-  - XXE (XML External Entity)
-  - LFI/RFI (Local/Remote File Inclusion)
-  - IDOR (Insecure Direct Object Reference)
-  - Authentication bypass
-  - Authorization flaws
-
-Runs after human approval gate (same as Surgeon) — web exploitation
-is active exploitation and requires authorization.
+  - XSS (reflected, stored, DOM-based) detection
+  - CSRF (token analysis, bypass attempts) detection
+  - SQL injection detection (error-based, blind, time-based)
+  - File upload vulnerability detection
+  - SSTI (Server-Side Template Injection) detection
+  - SSRF (Server-Side Request Forgery) detection
+  - XXE (XML External Entity) detection
+  - LFI/RFI (Local/Remote File Inclusion) detection
+  - IDOR (Insecure Direct Object Reference) detection
+  - Authentication bypass detection
+  - Authorization flaws detection
 """
 
 from typing import Dict, Any, Optional
@@ -29,35 +31,25 @@ from core.state import SwarmState
 
 
 class Wasp(BaseBot):
-    """Wasp — Web Application Pentesting Specialist. Human gate enforced."""
+    """Wasp — Web Application Vulnerability Detection Specialist.
+
+    Runs in parallel with Bloodhound. No human approval needed — this is
+    detection, not exploitation.
+    """
 
     bot_name = "wasp"
     role_description = (
-        "web application penetration testing specialist — XSS, CSRF, SQLi, "
-        "file upload, SSTI, SSRF, XXE, LFI/RFI, IDOR, auth bypass"
+        "web application vulnerability detection specialist — XSS, CSRF, SQLi, "
+        "file upload, SSTI, SSRF, XXE, LFI/RFI, IDOR, auth bypass detection"
     )
     scope_description = (
-        "Web application exploitation ONLY. Active exploitation of web-layer "
-        "vulnerabilities. NO network exploitation, NO privilege escalation, "
-        "NO data exfiltration."
+        "Web application vulnerability DETECTION ONLY. Probes for web vulns, "
+        "crafts PoCs to confirm they exist, but does not exploit for shell. "
+        "NO network exploitation, NO privilege escalation, NO data exfiltration."
     )
 
     def __init__(self, state: SwarmState, swarm_config: Optional[Dict[str, Any]] = None):
         super().__init__(state, swarm_config)
-
-    async def run(self) -> Dict[str, Any]:
-        """Override to check human approval gate before doing anything."""
-        if not self.state.get("human_approval", False):
-            self._banner()
-            self._log("HUMAN APPROVAL NOT GRANTED — web exploitation blocked", "GATE")
-            self._append_log("BLOCKED: Human approval not granted. Web exploitation skipped.")
-            self._write_bot_file("# WASP — BLOCKED\n\nHuman approval not granted. Web exploitation phase skipped.\n")
-            decision = {"needed": True, "strategy": "await_approval", "confidence": 1.0,
-                        "reasoning": "Human approval gate not passed."}
-            self.state.setdefault("reasoning_reports", {})[self.bot_name] = decision
-            return {"reasoning": decision, "executed": False, "awaiting_approval": True}
-
-        return await super().run()
 
     def _build_system_prompt(self) -> str:
         """Override to add web pentesting context."""
@@ -65,161 +57,122 @@ class Wasp(BaseBot):
 
         addendum = """
 
-## Web Application Exploitation Context
+## Web Application Vulnerability Detection Context
 
-You are the web application exploitation specialist. Bloodhound identified
-potential web-layer vulnerabilities. Your job is to confirm and exploit them.
+You are the web application vulnerability detection specialist. You run
+ALONGSIDE Bloodhound — Bloodhound handles infrastructure (SSL, network
+services, CVE matching), you handle the web application layer.
 
-### Attack Categories (prioritize by Bloodhound findings)
+### Your Job
+Find and CONFIRM web vulnerabilities with lightweight PoCs. You are not
+exploiting for shell — you are proving vulnerabilities exist so WarChief
+can decide whether to escalate to exploitation.
 
-1. **SQL Injection**
-   - Use sqlmap for automated SQLi detection and exploitation
-   - Test error-based, blind (boolean/time-based), UNION-based
-   - Extract database structure, tables, and data samples
-   - Try --dbs, --tables, --dump for evidence
+### Detection Categories (test all applicable)
 
-2. **Cross-Site Scripting (XSS)**
-   - Reflected: test URL parameters, search forms, error messages
-   - Stored: test input fields that persist (comments, profiles, posts)
-   - DOM-based: analyze JavaScript for sink/source patterns
-   - Use dalfox for automated XSS detection
-   - Craft manual payloads to bypass filters
+1. **SQL Injection** — Use sqlmap in detection mode (--batch --level 1).
+   Test URL parameters, POST data, cookies, headers. Don't dump data —
+   just confirm injection is possible.
 
-3. **CSRF**
-   - Check for anti-CSRF tokens
-   - Test if tokens are validated server-side
-   - Craft cross-origin request PoCs
-   - Check SameSite cookie attributes
+2. **Cross-Site Scripting (XSS)** — Use dalfox or manual payloads.
+   Reflected: test URL parameters, search, error messages.
+   Stored: test input fields that persist (comments, profiles).
+   DOM: look for dangerous JavaScript sinks (innerHTML, document.write).
 
-4. **File Upload**
-   - Test for unrestricted file upload
-   - Try bypassing filters: double extensions, null bytes, MIME spoofing
-   - Upload web shells if upload is exploitable
-   - Check if uploaded files are accessible and executable
+3. **CSRF** — Check for anti-CSRF tokens on state-changing requests.
+   Test if tokens are validated. Check SameSite cookie attributes.
 
-5. **SSTI (Server-Side Template Injection)**
-   - Test template engines (Jinja2, Twig, Freemarker, Velocity)
-   - Use {{7*7}} and {{7*'7'}} probe payloads
-   - Escalate to RCE if SSTI confirmed
+4. **File Upload** — Test for unrestricted upload. Try bypassing filters:
+   double extensions, null bytes, MIME spoofing. Don't upload shells —
+   just confirm the bypass works.
 
-6. **SSRF**
-   - Test URL parameters that fetch remote resources
-   - Try internal IP access (169.254.169.254 for cloud metadata)
-   - Test protocol smuggling (file://, gopher://, dict://)
+5. **SSTI** — Probe template engines with {{7*7}} payloads.
+   Jinja2, Twig, Freemarker, Velocity. Confirm if output reflects 49.
 
-7. **LFI/RFI**
-   - Test path traversal in file parameters
-   - Try ../ sequences, null bytes, double encoding
-   - Read sensitive files (/etc/passwd, web.config, .env)
+6. **SSRF** — Test URL parameters that fetch remote resources.
+   Try internal IPs, cloud metadata (169.254.169.254).
 
-8. **IDOR**
-   - Test object references (user IDs, file IDs, API endpoints)
-   - Try incrementing/decrementing IDs
-   - Test vertical and horizontal privilege escalation
+7. **LFI/RFI** — Test path traversal in file parameters.
+   ../ sequences, null bytes, double encoding. Read /etc/passwd or equivalent.
 
-9. **Authentication Bypass**
-   - Test default credentials
-   - SQL injection in login forms
-   - Session manipulation
-   - JWT tampering (alg=none, key confusion)
+8. **IDOR** — Test object references (user IDs, file IDs, API endpoints).
+   Try incrementing/decrementing IDs. Vertical and horizontal.
 
-10. **Authorization Flaws**
-    - Test forced browsing to admin panels
-    - Check if API endpoints enforce authorization
-    - Test role escalation
+9. **Authentication Bypass** — Test default credentials, SQLi in login,
+   session manipulation, JWT tampering (alg=none).
+
+10. **Authorization Flaws** — Forced browsing to admin panels.
+    Check if API endpoints enforce authorization.
+
+11. **Information Disclosure** — Check /robots.txt, /.git/, /.env,
+    /server-status, /admin, /api/docs, swagger endpoints, backup files.
+
+12. **Parameter Discovery** — Use ffuf/gobuster for hidden parameters,
+    API endpoints, and directories not covered by Lisa.
 
 ### Approach
-- Start with Bloodhound's findings — don't reinvent
-- One attack vector at a time, verify before moving on
-- Capture evidence: PoC requests, responses, screenshots-equivalent (curl output)
-- Track every successful exploit in structured_data
-- If a vector fails after 3 attempts, record it and move on
-- Don't repeat what Surgeon already tried — check surgeon.md first
+- Start from Bloodhound's and Lisa's findings — don't reinvent
+- Test one category at a time, verify before moving on
+- Use --batch and non-interactive flags on all tools
+- Capture evidence: request, response snippet, PoC payload
+- Lightweight PoCs only — prove it works, don't do damage
+- If a vector shows nothing after reasonable effort, move on
+- 3 failures on the same payload type = filtered, move on
 
 ### Evidence Format
-For each confirmed vulnerability, provide:
-- Vulnerability type (XSS, SQLi, etc.)
-- Target URL and parameter
-- PoC payload/request
-- Response snippet (proof)
-- Impact assessment
-- Remediation recommendation
+For each confirmed vulnerability, provide in structured_data.confirmed_vulns:
+{
+  "type": "XSS|SQLi|CSRF|...",
+  "url": "https://target.com/page?param=value",
+  "parameter": "param",
+  "method": "GET|POST",
+  "poc": "actual payload used",
+  "response_evidence": "snippet of response proving vulnerability",
+  "severity": "critical|high|medium|low",
+  "impact": "what an attacker could do",
+  "remediation": "how to fix"
+}
 """
 
         return base_prompt + addendum
 
     def _update_state(self, decision: Dict[str, Any], analysis: Dict[str, Any], tool_results: list):
-        """Update state with web exploitation findings and track sessions."""
+        """Update state with web vulnerability findings."""
         try:
             structured = analysis.get("structured_data", {})
             if not isinstance(structured, dict):
                 structured = {}
 
-            # Track confirmed web vulnerabilities
-            web_vulns = structured.get("confirmed_vulns", [])
             self.state.setdefault("reasoning_reports", {})[self.bot_name] = decision
 
-            # Update vuln_report with confirmed exploits
+            # Track confirmed web vulnerabilities
+            web_vulns = structured.get("confirmed_vulns", [])
+            if not web_vulns:
+                # Also check findings list for vuln entries
+                findings = analysis.get("findings", [])
+                for f in findings:
+                    if isinstance(f, dict):
+                        web_vulns.append(f)
+                    elif isinstance(f, str) and any(x in f.lower() for x in
+                                  ["xss", "sqli", "csrf", "ssrf", "lfi", "rfi", "ssti", "idor"]):
+                        web_vulns.append({"description": f, "type": "unknown"})
+
+            # Merge into vuln_report
             vuln_report = self.state.get("vuln_report", [])
             if not isinstance(vuln_report, list):
                 vuln_report = []
             for vuln in web_vulns:
                 if isinstance(vuln, dict):
-                    vuln["status"] = "confirmed_exploited"
+                    vuln["detected_by"] = "wasp"
+                    vuln["status"] = "confirmed_detected"
                     vuln_report.append(vuln)
             self.state["vuln_report"] = vuln_report
 
-            # Track active sessions (e.g., if web shell uploaded)
-            sessions = structured.get("sessions", [])
-            if sessions:
-                existing_sessions = self.state.get("active_sessions", [])
-                if not isinstance(existing_sessions, list):
-                    existing_sessions = []
-                for session in sessions:
-                    if isinstance(session, dict):
-                        existing_sessions.append(session)
-                self.state["active_sessions"] = existing_sessions
-
-            # Track exploited hosts
-            exploited = self.state.get("exploited_hosts", [])
-            if not isinstance(exploited, list):
-                exploited = []
-            for key in ("exploited_hosts", "compromised", "access"):
-                found = structured.get(key, [])
-                if isinstance(found, list):
-                    for h in found:
-                        if isinstance(h, str) and h not in exploited:
-                            exploited.append(h)
-                        elif isinstance(h, dict):
-                            host = h.get("host") or h.get("target") or h.get("url")
-                            if host and isinstance(host, str) and host not in exploited:
-                                exploited.append(host)
-            self.state["exploited_hosts"] = exploited
-
-            # Track artifacts (e.g., uploaded web shells)
-            artifacts = self.state.get("target_artifacts", [])
-            if not isinstance(artifacts, list):
-                artifacts = []
-            for key in ("artifacts", "uploaded_files", "web_shells", "modifications"):
-                found = structured.get(key, [])
-                if isinstance(found, list):
-                    for a in found:
-                        if isinstance(a, dict):
-                            artifact = {
-                                "host": a.get("host") or a.get("target", "unknown"),
-                                "artifact_type": a.get("type", key),
-                                "path": a.get("path", a.get("location", "unknown")),
-                                "description": a.get("description", ""),
-                                "cleaned": False,
-                            }
-                            artifacts.append(artifact)
-            self.state["target_artifacts"] = artifacts
-
-            # Track failed exploitation attempts
+            # Track failed detection attempts
             failed = self.state.get("failed_vectors", [])
             if not isinstance(failed, list):
                 failed = []
-            for key in ("failed_exploits", "errors", "blocked_attempts"):
+            for key in ("failed_checks", "errors", "blocked_scans"):
                 found = structured.get(key, [])
                 if isinstance(found, list):
                     for item in found:
@@ -237,7 +190,7 @@ For each confirmed vulnerability, provide:
                     failed.append({
                         "target": self.state.get("mission", {}).get("target", "unknown"),
                         "tool": tool_name,
-                        "error": result.get("stderr", "exploit failed")[:200],
+                        "error": result.get("stderr", "scan failed")[:200],
                         "timestamp": "",
                     })
             self.state["failed_vectors"] = failed
