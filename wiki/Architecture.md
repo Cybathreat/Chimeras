@@ -21,15 +21,15 @@ Chimeras v2 is a multi-agent AI penetration testing framework built on LangGraph
                     │ WarChief │ ◄── re-enters after each phase
                     │ (router) │
                     └────┬─────┘
-                         │ conditional edge (11 routing decisions)
+                         │ conditional edge (12 routing decisions)
           ┌──────────────┼──────────────┐
           ▼              ▼              ▼
-     ┌─────────┐   ┌─────────┐   ┌────────────┐
-     │  ARIA   │   │  Lisa   │   │ Bloodhound │
-     │ (recon) │   │ (scan)  │   │  (vulns)   │
-     └────┬────┘   └────┬────┘   └─────┬──────┘
-          │              │              │
-          └──────────────┴──────────────┘
+     ┌─────────┐   ┌─────────┐   ┌──────────────────┐
+     │  ARIA   │   │  Lisa   │   │ Bloodhound + Wasp │
+     │ (recon) │   │ (scan)  │   │ (parallel vulns)  │
+     └────┬────┘   └────┬────┘   └────────┬─────────┘
+          │              │                 │
+          └──────────────┴─────────────────┘
                          │
                     ┌────▼─────┐
                     │HUMAN GATE│ ◄── exploitation approval
@@ -53,6 +53,9 @@ Chimeras v2 is a multi-agent AI penetration testing framework built on LangGraph
                                 │ cleanup)   │
                                 └────────────┘
 
+  Bloodhound+Wasp: Bloodhound detects infra vulns (SSL, CVEs, network),
+                   Wasp detects web app vulns (XSS, CSRF, SQLi, SSTI, SSRF, ...).
+                   Both run in parallel via asyncio.gather. No human gate for detection.
   Loopback: WarChief can route back to ARIA/Lisa for deeper recon
   Lateral gate: second human approval before any internal pivot
   Abort: 3+ failed exploits or 5 loops per phase → Bookkeeper
@@ -130,6 +133,7 @@ mission/engagement/
 ├── aria.md
 ├── lisa.md
 ├── bloodhound.md
+├── wasp.md
 ├── pathologist.md
 ├── surgeon.md
 ├── magician.md

@@ -26,6 +26,9 @@ mission_*/
 mission/
 !mission_*/swarm-config.json
 
+# Local AI context files (not for version control)
+CLAUDE.md
+
 # Engagement artifacts
 **/engagement/raw/
 **/engagement/poc/

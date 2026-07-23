@@ -1,11 +1,11 @@
 # Bot Reference (v2)
 
-## The 9 Bots
+## The 10 Bots
 
 ### WarChief — Decision Router
 - **Role**: Re-enters after each phase, analyzes accumulated findings, makes routing decisions. Not a one-shot planner.
 - **Tool Category**: `none` (no tool execution)
-- **Routing Decisions**: 11 — `recon`, `scan`, `vulns_found_exploit`, `insufficient_data_abort`, `lateral_recon`, `lateral_scan`, `pivot_lateral_recon`, `exploit`, `privesc`, `exfil`, `report`
+- **Routing Decisions**: 12 — `init`, `recon`, `scan`, `vuln_detection`, `vulns_found_exploit`, `insufficient_data_abort`, `lateral_recon`, `lateral_scan`, `report`, `continue_exploit`, `privesc`, `exfiltrate`
 - **State Machine**: 11 states — init → recon → scanning → vuln_detection → exploitation_prep → exploitation → post_exploit → lateral_recon → lateral_scanning → reporting → complete
 - **Confidence Threshold**: below 0.6 → override to safe conservative route
 - **Fallback**: malformed LLM output → defaults to `report` route, engagement degrades safely
@@ -26,13 +26,23 @@
 - **Input**: ARIA's recon findings
 - **Output**: `lisa.md`, findings appended to `findings.md`, `internal_targets` in state
 
-### Bloodhound — Vulnerability Detection
+### Bloodhound — Vulnerability Detection (Infrastructure)
 - **Role**: CVE matching, vulnerability scanning, SSL analysis. v2: WAF/IPS detection, failed vector tracking
 - **Tool Category**: `vuln_detection`
 - **Available Tools**: nmap (scripts), nuclei, searchsploit, nikto, wapiti, wafw00f, ssh-audit, sslscan, testssl, vulners
 - **Input**: Lisa's scan results (open ports, services)
 - **Output**: `bloodhound.md`, `vuln_report` in state, `failed_vectors` in state
-- **Gate**: After Bloodhound, human must approve exploitation
+- **Runs in parallel with Wasp** — Bloodhound covers infrastructure, Wasp covers web application
+- **Gate**: After Bloodhound+Wasp, human must approve exploitation
+
+### Wasp — Web Application Vulnerability Detection
+- **Role**: Detects web-layer vulnerabilities: XSS, CSRF, SQLi, file upload, SSTI, SSRF, XXE, LFI/RFI, IDOR, auth bypass, authorization flaws, information disclosure. Proves vulnerabilities with lightweight PoCs.
+- **Tool Category**: `web_exploit`
+- **Available Tools**: sqlmap, nikto, nuclei, curl, python3, ffuf, wfuzz, dalfox, commix, gobuster, whatweb, nmap, httpx
+- **Input**: Lisa's scan results + ARIA's recon findings — starts immediately, doesn't wait for Bloodhound
+- **Output**: `wasp.md`, findings appended to `vuln_report` in state (with `detected_by: wasp`), `failed_vectors` in state
+- **No human approval needed** — this is detection, not exploitation
+- **Runs in parallel with Bloodhound** via asyncio.gather inside the bloodhound graph node
 
 ### Pathologist — Payload Fabrication
 - **Role**: Generates payloads based on discovered vulnerabilities
