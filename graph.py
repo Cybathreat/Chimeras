@@ -442,6 +442,7 @@ def _unified_router(state: SwarmState) -> str:
         # Unknown last_bot — try forward progress based on decision
         print(f"[ROUTING] Unknown last_bot '{last_bot}' with decision '{decision}' — trying forward progress")
         forward_map = {
+            "init": "aria",
             "recon": "aria",
             "scan": "lisa",
             "vuln_detection": "bloodhound",
