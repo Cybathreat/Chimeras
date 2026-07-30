@@ -16,7 +16,10 @@ import re
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 
-from core.scope import ScopeEnforcer, ScopeViolation, TargetScopeViolation, ShellInjectionViolation
+from core.scope import (
+    ScopeEnforcer, ScopeViolation, TargetScopeViolation,
+    ShellInjectionViolation, DestructiveCommandViolation,
+)
 
 
 class ToolExecutor:
@@ -29,12 +32,13 @@ class ToolExecutor:
 
     def __init__(self, timeout: int = 120, workdir: Optional[str] = None,
                  bot_name: str = "", mission_scope: str = "",
-                 internal_scope: str = ""):
+                 internal_scope: str = "", roe: str = ""):
         self.timeout = timeout
         self.workdir = workdir or "/tmp"
         self.bot_name = bot_name
         self.mission_scope = mission_scope
         self.internal_scope = internal_scope
+        self.roe = roe
 
     @staticmethod
     def _sanitize_command(command: str) -> str:
@@ -67,23 +71,36 @@ class ToolExecutor:
 
         v2: Before execution, runs the full ScopeEnforcer.check() which
         includes:
-        1. Shell metacharacter injection check
-        2. Tool category check (v1)
-        3. Target/CIDR validation (v2)
+        1. Destructive / DoS command check
+        2. Shell metacharacter injection check
+        3. Tool category check (v1)
+        4. Target/CIDR validation (v2)
 
         If any check fails, the command is NOT executed and the result
         contains an error message with scope_blocked=True.
         """
         t = timeout or self.timeout
 
-        # v2: Full scope enforcement — injection, category, target
+        # v2: Full scope enforcement — destructive/DoS, injection, category, target
         if self.bot_name:
             try:
                 ScopeEnforcer.enforce(
                     self.bot_name, command,
                     mission_scope=self.mission_scope or None,
                     internal_scope=self.internal_scope or None,
+                    roe=self.roe or None,
                 )
+            except DestructiveCommandViolation as e:
+                return {
+                    "command": command,
+                    "exit_code": -2,
+                    "stdout": "",
+                    "stderr": str(e),
+                    "duration_sec": 0,
+                    "success": False,
+                    "scope_blocked": True,
+                    "violation_type": "destructive_or_dos_command",
+                }
             except ShellInjectionViolation as e:
                 return {
                     "command": command,

@@ -2,6 +2,19 @@
 
 All notable changes to Chimeras. Dates in Paris time (CEST/UTC+2).
 
+## v2.2 — 2026-07-30
+
+### Added
+- **Destructive/DoS command blocklist** — code-level enforcement of Rules of Engagement. `rm -rf`, `mkfs`, `dd of=/dev/`, fork bombs, `DROP TABLE`, `TRUNCATE TABLE`, `shutdown/reboot/halt`, Windows `format`, and flood-rate scan flags (nmap `--max-rate >=100000`, hping3 `--flood`, slowloris, goldeneye) are blocked before execution, independent of tool category. Hard destructive patterns always blocked; DoS-capable flags blocked when RoE restricts DoS or when no RoE is supplied (fail safe). `DestructiveCommandViolation` exception class added to `core/scope.py`.
+- **Gate decision logging** — every exploitation and lateral-movement gate decision (approved, denied, auto-approved, errored) is now written to `engagement/log.md` with timestamp, gate name, mode, and detail. The decision to bypass human review via `--approve` is now part of the permanent mission record, not just terminal scrollback. `_log_gate_decision()` function added to `graph.py`.
+- **RoE parameter** propagated through the full enforcement chain: `ScopeEnforcer.check()`, `ScopeEnforcer.enforce()`, `ToolExecutor.__init__()`, `BaseBot._execute_tool()`.
+
+### Changed
+- **Scope enforcement order** — now 4 checks instead of 3: destructive/DoS → shell injection → tool category → target/CIDR. Destructive check runs first because it's category-independent.
+- **README** — two new design principles documented (destructive command blocking, gate decision logging).
+
+---
+
 ## v2.1 — 2026-07-30
 
 ### Added

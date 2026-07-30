@@ -97,6 +97,39 @@ def _log_error(state: SwarmState, bot_name: str, error: Exception) -> None:
         pass
 
 
+def _log_gate_decision(state: SwarmState, gate_name: str, approved: bool,
+                        mode: str, detail: str = "") -> None:
+    """Persist every human/lateral approval gate decision to the engagement
+    log file — including auto-approved ones.
+
+    A gate decision that only exists as a terminal print is invisible the
+    moment the session closes, which means the single most safety-relevant
+    decision in the pipeline (bypassing human review before exploitation or
+    lateral movement) can leave no trace in the mission record. Never
+    raises — a logging failure should never abort the engagement.
+    """
+    try:
+        eng_dir = state.get("engagement_dir", "")
+        if not eng_dir:
+            return
+        from pathlib import Path
+        from datetime import datetime
+        log_path = Path(eng_dir) / "log.md"
+        if log_path.parent.exists():
+            status = "APPROVED" if approved else "DENIED"
+            line = (
+                f"\n[{datetime.utcnow().isoformat()}] [GATE:{gate_name}] "
+                f"{status} (mode={mode})"
+            )
+            if detail:
+                line += f" — {detail}"
+            line += "\n"
+            with open(log_path, "a") as f:
+                f.write(line)
+    except Exception:
+        pass
+
+
 # ─── Phase-specific routing functions ───
 # Each checks loop limit, reads last_decision, returns next node name.
 
@@ -530,14 +563,20 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
                 if auto_approve:
                     print("Proceeding with exploitation phase anyway (--approve flag)")
                     state["human_approval"] = True
+                    _log_gate_decision(state, "exploitation", True, "auto",
+                                        "0 vulns cataloged — proceeded anyway (--approve)")
                     return state
                 print("Skipping exploitation phase.")
                 state["human_approval"] = False
+                _log_gate_decision(state, "exploitation", False, "auto",
+                                    "0 vulns cataloged — nothing to approve")
                 return state
 
             if auto_approve:
                 print("\nExploitation AUTO-APPROVED (--approve flag)\n")
                 state["human_approval"] = True
+                _log_gate_decision(state, "exploitation", True, "auto",
+                                    f"{len(vuln_report)} vuln(s) cataloged")
                 return state
 
             try:
@@ -547,12 +586,18 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
             if response == "y":
                 print("\nExploitation APPROVED — proceeding\n")
                 state["human_approval"] = True
+                _log_gate_decision(state, "exploitation", True, "interactive",
+                                    f"{len(vuln_report)} vuln(s) cataloged")
             else:
                 print("\nExploitation DENIED — skipping to final report\n")
                 state["human_approval"] = False
+                _log_gate_decision(state, "exploitation", False, "interactive",
+                                    f"{len(vuln_report)} vuln(s) cataloged")
         except Exception as e:
             print(f"[HUMAN APPROVAL ERROR] {e} — defaulting to deny")
             state["human_approval"] = False
+            _log_gate_decision(state, "exploitation", False, "error",
+                                f"exception during gate: {e}")
         return state
 
     def lateral_approval_node(state: SwarmState) -> SwarmState:
@@ -575,6 +620,8 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
             if auto_approve:
                 print("\nLateral movement AUTO-APPROVED (--approve flag)\n")
                 state["lateral_approval"] = True
+                _log_gate_decision(state, "lateral_movement", True, "auto",
+                                    f"WarChief decision: {last_decision}")
                 return state
 
             try:
@@ -585,12 +632,18 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
             if response == "y":
                 print("\nLateral movement APPROVED — proceeding\n")
                 state["lateral_approval"] = True
+                _log_gate_decision(state, "lateral_movement", True, "interactive",
+                                    f"WarChief decision: {last_decision}")
             else:
                 print("\nLateral movement DENIED — routing to final report\n")
                 state["lateral_approval"] = False
+                _log_gate_decision(state, "lateral_movement", False, "interactive",
+                                    f"WarChief decision: {last_decision}")
         except Exception as e:
             print(f"[LATERAL APPROVAL ERROR] {e} — defaulting to deny")
             state["lateral_approval"] = False
+            _log_gate_decision(state, "lateral_movement", False, "error",
+                                f"exception during gate: {e}")
         return state
 
     def scope_expansion_node(state: SwarmState) -> SwarmState:

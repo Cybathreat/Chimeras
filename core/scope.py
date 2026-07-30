@@ -118,6 +118,17 @@ class TargetScopeViolation(Exception):
         )
 
 
+class DestructiveCommandViolation(Exception):
+    """Raised when a command matches the destructive/DoS command blocklist,
+    independent of tool category or target scope.
+    """
+    def __init__(self, bot_name: str, command: str, reason: str):
+        self.bot_name = bot_name
+        self.command = command
+        self.reason = reason
+        super().__init__(reason)
+
+
 class ShellInjectionViolation(Exception):
     """Raised when a command contains shell metacharacters that bypass
     the category-based tool check.
@@ -167,6 +178,90 @@ SHELL_CAPABLE_CATEGORIES = {
     "exfiltration",   # bash, python3, tar — needs shell for pipelines
     "payload_fab",    # msfconsole, curl — may need shell for payload crafting
 }
+
+
+# ─── Destructive / DoS command detection ───
+#
+# The mission's Rules of Engagement (e.g. "No DoS, no data destruction") are
+# currently only free text handed to the LLM as prompt context — there is no
+# code-level enforcement of them, unlike mission-scope targeting which IS
+# enforced in code (see TargetValidator above, and its own docstring on why
+# LLM judgment alone isn't sufficient). A human watching a single supervised
+# engagement will usually catch an obviously destructive command before it's
+# actually run; this check exists so that catch doesn't depend entirely on
+# someone reading the terminal in real time, and so RoE violations are
+# blocked the same way out-of-scope targets already are.
+#
+# This is deliberately a narrow, high-confidence blocklist (filesystem/disk
+# destruction, DB drops, fork bombs, obvious flood/DoS flags) rather than an
+# attempt to model "is this destructive" in general — false negatives here
+# still get a human at the approval gate; false positives on legitimate
+# pentest commands would just make the tool annoying to use.
+
+DESTRUCTIVE_COMMAND_PATTERNS = [
+    (re.compile(r'\brm\s+-[a-zA-Z]*r[a-zA-Z]*f\b'), "rm -rf (recursive force delete)"),
+    (re.compile(r'\brm\s+-[a-zA-Z]*f[a-zA-Z]*r\b'), "rm -fr (recursive force delete)"),
+    (re.compile(r'\bmkfs(\.\w+)?\b'), "mkfs (filesystem format)"),
+    (re.compile(r'\bdd\s+.*\bof=/dev/'), "dd write to a block device"),
+    (re.compile(r':\(\)\s*\{\s*:\|\s*:\s*&\s*\}\s*;\s*:'), "fork bomb"),
+    (re.compile(r'\bDROP\s+(TABLE|DATABASE)\b', re.IGNORECASE), "SQL DROP TABLE/DATABASE"),
+    (re.compile(r'\bTRUNCATE\s+TABLE\b', re.IGNORECASE), "SQL TRUNCATE TABLE"),
+    (re.compile(r'\bshutdown\b|\breboot\b|\bhalt\b'), "system shutdown/reboot command"),
+    (re.compile(r'\bformat\s+[a-zA-Z]:'), "Windows format command"),
+]
+
+# nmap/masscan/hping3 flags associated with aggressive flooding rather than
+# ordinary scanning. Flagged, not silently blocked in isolation, since some
+# are legitimate at low rates — the rate-based ones are checked separately.
+DOS_CAPABLE_FLAGS = [
+    (re.compile(r'--max-rate[= ]0*([0-9]{6,})'), "nmap/masscan flood-level packet rate (>=100000/s)"),
+    (re.compile(r'\bhping3\b.*--flood\b'), "hping3 --flood"),
+    (re.compile(r'\bhping3\b.*-1\b.*--flood\b|\bhping3\b.*--flood\b.*-1\b'), "hping3 ICMP flood"),
+    (re.compile(r'\bslowloris\b'), "slowloris DoS tool"),
+    (re.compile(r'\bgoldeneye\b'), "GoldenEye DoS tool"),
+]
+
+
+def check_destructive_command(command: str, roe: Optional[str] = None) -> Tuple[bool, str]:
+    """Check a command against a narrow, high-confidence destructive/DoS
+    blocklist, independent of tool category or target scope.
+
+    Args:
+        command: The shell command to check.
+        roe: Optional Rules of Engagement string. If it doesn't mention
+            DoS/destruction restrictions, flood-flag matches are downgraded
+            to a warning rather than a block (the operator explicitly did
+            not restrict this), but the hard destructive-command blocklist
+            always applies regardless of RoE wording.
+
+    Returns:
+        (is_safe: bool, reason: str)
+    """
+    for pattern, label in DESTRUCTIVE_COMMAND_PATTERNS:
+        if pattern.search(command):
+            return False, (
+                f"DESTRUCTIVE COMMAND BLOCKED: matched pattern for {label}. "
+                f"Command: {command[:100]}"
+            )
+
+    roe_restricts_dos = bool(roe) and any(
+        kw in roe.lower() for kw in ("no dos", "no denial", "no destruction", "no flood")
+    )
+    for pattern, label in DOS_CAPABLE_FLAGS:
+        if pattern.search(command):
+            if roe_restricts_dos or roe is None:
+                # Default-deny when RoE explicitly restricts DoS, or when no
+                # RoE was supplied at all (fail toward the safer assumption).
+                return False, (
+                    f"DOS-CAPABLE COMMAND BLOCKED: matched {label}, and RoE "
+                    f"restricts denial-of-service. Command: {command[:100]}"
+                )
+            # RoE was supplied and does not mention DoS restrictions —
+            # operator has implicitly allowed it; let it through but this
+            # should still be surfaced to the log.
+            return True, f"WARNING: DoS-capable command allowed by RoE ({label})"
+
+    return True, "OK"
 
 
 # ─── Target Validator ───
@@ -546,30 +641,41 @@ class ScopeEnforcer:
     @staticmethod
     def check(bot_name: str, command: str,
               mission_scope: Optional[str] = None,
-              internal_scope: Optional[str] = None) -> Tuple[bool, str]:
+              internal_scope: Optional[str] = None,
+              roe: Optional[str] = None) -> Tuple[bool, str]:
         """
         Check if a command is within the bot's scope.
 
-        v2: Performs three checks in order:
-        1. Shell metacharacter injection check
-        2. Tool category check (v1)
-        3. Target/CIDR validation (v2)
+        v2: Performs four checks in order:
+        1. Destructive / DoS command check (independent of category)
+        2. Shell metacharacter injection check
+        3. Tool category check (v1)
+        4. Target/CIDR validation (v2)
 
         Args:
             bot_name: Name of the bot.
             command: The shell command to check.
             mission_scope: Mission scope string (IP/CIDR/hostname) for target validation.
             internal_scope: Optional lateral movement scope (after approval gate).
+            roe: Optional Rules of Engagement string, used by the destructive/DoS check.
 
         Returns:
             (allowed: bool, reason: str)
         """
-        # ─── Check 1: Shell metacharacter injection (v2 Phase -1) ───
+        # ─── Check 1: Destructive / DoS command check ───
+        # Runs before the category check because it's category-independent —
+        # a destructive command shouldn't be waved through just because the
+        # tool itself (e.g. bash, python3) is in an allowed category.
+        destructive_safe, destructive_reason = check_destructive_command(command, roe)
+        if not destructive_safe:
+            return False, destructive_reason
+
+        # ─── Check 2: Shell metacharacter injection (v2 Phase -1) ───
         injection_safe, injection_reason = check_shell_injection(command, bot_name)
         if not injection_safe:
             return False, injection_reason
 
-        # ─── Check 2: Tool category check (v1) ───
+        # ─── Check 3: Tool category check (v1) ───
         allowed_tools = ScopeEnforcer.get_allowed_tools(bot_name)
 
         # Bookkeeper and WarChief don't run tools at all
@@ -602,7 +708,7 @@ class ScopeEnforcer:
         if tool not in allowed_tools:
             return False, f"SCOPE VIOLATION: {bot_name} cannot use '{tool}'. Allowed: {sorted(allowed_tools)}"
 
-        # ─── Check 3: Target/CIDR validation (v2 Phase -1) ───
+        # ─── Check 4: Target/CIDR validation (v2 Phase -1) ───
         if mission_scope:
             validator = TargetValidator(mission_scope, internal_scope)
             target_ok, target_reason = validator.validate_command(command, bot_name)
@@ -614,15 +720,22 @@ class ScopeEnforcer:
     @staticmethod
     def enforce(bot_name: str, command: str,
                 mission_scope: Optional[str] = None,
-                internal_scope: Optional[str] = None) -> str:
+                internal_scope: Optional[str] = None,
+                roe: Optional[str] = None) -> str:
         """
-        Enforce scope. Raises ScopeViolation, TargetScopeViolation,
-        or ShellInjectionViolation if violated.
+        Enforce scope. Raises DestructiveCommandViolation, ScopeViolation,
+        TargetScopeViolation, or ShellInjectionViolation if violated.
 
-        v2: Pass mission_scope and internal_scope for target validation.
+        v2: Pass mission_scope and internal_scope for target validation,
+        and roe for the destructive/DoS command check.
         Returns the command if allowed.
         """
-        # Check shell injection first
+        # Destructive/DoS command check first — independent of category.
+        destructive_safe, destructive_reason = check_destructive_command(command, roe)
+        if not destructive_safe:
+            raise DestructiveCommandViolation(bot_name, command, destructive_reason)
+
+        # Check shell injection next
         injection_safe, injection_reason = check_shell_injection(command, bot_name)
         if not injection_safe:
             raise ShellInjectionViolation(
@@ -630,8 +743,8 @@ class ScopeEnforcer:
                 next((m for m in [";", "&&", "||", "`", "$(", "|", ">", "<"] if m in command), "?")
             )
 
-        # Tool category check
-        allowed, reason = ScopeEnforcer.check(bot_name, command, mission_scope, internal_scope)
+        # Tool category + target check
+        allowed, reason = ScopeEnforcer.check(bot_name, command, mission_scope, internal_scope, roe)
         if not allowed:
             # Distinguish target violation from tool violation
             if "TARGET OUT OF SCOPE" in reason:

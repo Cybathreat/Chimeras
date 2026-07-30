@@ -1,4 +1,4 @@
-# Chimeras v2.1
+# Chimeras v2.2
 
 **Autonomous Adaptive AI Pentesting Swarm**
 
@@ -6,7 +6,7 @@
 
 **v2**: WarChief is a decision router — re-enters after every phase, adapts routing based on actual findings, loops back for deeper recon, pivots to lateral movement, handles failures gracefully.
 
-**v2.1**: Wasp bot added — web application vuln detection specialist. Runs in parallel with Bloodhound for infrastructure vuln detection. True OS-thread parallelism via `asyncio.to_thread`.
+**v2.2**: Destructive/DoS command blocklist enforced at code level — rm -rf, mkfs, DROP TABLE, flood-rate flags blocked regardless of tool category. Every gate decision now logged to engagement/log.md with timestamp.
 
 Built by [Cyberian Defenses](https://cyberian-defenses.com).
 
@@ -118,6 +118,8 @@ Bloodhound and Wasp run **in parallel** during vuln detection. Bloodhound handle
 - **Category-based scoping** — bots declare a tool *category*. Scope enforcer discovers installed tools dynamically
 - **Code-level scope enforcement** — `TargetValidator` resolves IPs/hostnames, checks against CIDR scope. Not a prompt instruction
 - **Shell injection blocked at code level** — metacharacters rejected for categories that don't need them
+- **Destructive/DoS commands blocked at code level** — rm -rf, mkfs, DROP TABLE, flood-rate scan flags, etc. are checked against the RoE regardless of tool category; a bot with shell access can't use it to bypass this the way it can bypass the tool-category check
+- **Every gate decision is logged, not just printed** — exploitation and lateral-movement approvals (including auto-approvals via --approve) are written to engagement/log.md with a timestamp, so the decision to bypass human review is part of the permanent mission record, not just terminal scrollback
 - **File-based communication** — bots share state through engagement files only
 - **Provider-agnostic** — any LLM provider. Custom gateway support via `base_url`
 - **Two human-in-loop gates** — exploitation gate + lateral movement gate
@@ -282,4 +284,4 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-**Chimeras v2.1** — Cyberian Defenses
+**Chimeras v2.2** — Cyberian Defenses

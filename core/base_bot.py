@@ -45,12 +45,14 @@ class BaseBot(ABC):
         mission = state.get("mission", {})
         mission_scope = mission.get("scope", "")
         internal_scope = state.get("internal_scope", "")
+        mission_roe = mission.get("roe", "")
         self.executor = ToolExecutor(
             timeout=180,
             workdir="/tmp",
             bot_name=self.bot_name,
             mission_scope=mission_scope,
             internal_scope=internal_scope,
+            roe=mission_roe,
         )
         self.engagement_dir: Optional[Path] = None
         self._resolve_engagement_dir()
@@ -274,10 +276,12 @@ class BaseBot(ABC):
         if approved_extra:
             full_scope = ", ".join([mission_scope] + approved_extra) if mission_scope else ", ".join(approved_extra)
         internal_scope = self.state.get("internal_scope", "")
+        mission_roe = mission.get("roe", "")
         allowed, reason = ScopeEnforcer.check(
             self.bot_name, command,
             mission_scope=full_scope or None,
             internal_scope=internal_scope or None,
+            roe=mission_roe or None,
         )
         if not allowed:
             self._log(f"SCOPE BLOCKED: {reason}", "SCOPE")
