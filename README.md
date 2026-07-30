@@ -1,10 +1,12 @@
-# Chimeras v2.0
+# Chimeras v2.1
 
 **Autonomous Adaptive AI Pentesting Swarm**
 
-9 AI agents. Each one reasons for itself. Each one picks its own tools. Each one executes real Kali Linux commands against real targets. No hardcoded logic. No mock data. The LLM is the brain.
+10 AI agents. Each one reasons for itself. Each one picks its own tools. Each one executes real Kali Linux commands against real targets. No hardcoded logic. No mock data. The LLM is the brain.
 
-**v2**: WarChief is now a decision router — re-enters after every phase, adapts routing based on actual findings, loops back for deeper recon, pivots to lateral movement, handles failures gracefully.
+**v2**: WarChief is a decision router — re-enters after every phase, adapts routing based on actual findings, loops back for deeper recon, pivots to lateral movement, handles failures gracefully.
+
+**v2.1**: Wasp bot added — web application vuln detection specialist. Runs in parallel with Bloodhound for infrastructure vuln detection. True OS-thread parallelism via `asyncio.to_thread`.
 
 Built by [Cyberian Defenses](https://cyberian-defenses.com).
 
@@ -32,12 +34,15 @@ WarChief re-evaluates after each phase and routes dynamically. If recon finds no
 | WarChief | Decision router — re-enters after each phase, routes dynamically | none |
 | ARIA | Passive reconnaissance | passive_recon |
 | Lisa | Active scanning | active_scan |
-| Bloodhound | Vulnerability detection | vuln_detection |
+| Bloodhound | Infrastructure vulnerability detection (SSL, CVEs, network services) | vuln_detection |
+| Wasp | Web application vulnerability detection (XSS, CSRF, SQLi, SSTI, SSRF, LFI/RFI, IDOR) | web_exploit |
 | Pathologist | Payload fabrication | payload_fab |
 | Surgeon | Exploitation | exploitation |
 | Magician | Privilege escalation & lateral movement | privesc |
 | Thief | Data exfiltration | exfiltration |
 | Bookkeeper | Report generation, cleanup & rollback | none |
+
+Bloodhound and Wasp run **in parallel** during vuln detection. Bloodhound handles infrastructure (SSL, CVEs, network services). Wasp handles web apps (XSS, SQLi, SSTI, SSRF, LFI/RFI, IDOR, auth bypass). No human approval needed for detection — only for exploitation.
 
 ## Architecture (v2 — Adaptive Graph)
 
@@ -46,15 +51,15 @@ WarChief re-evaluates after each phase and routes dynamically. If recon finds no
                     │ WarChief │ ◄── re-enters after each phase
                     │ (router) │
                     └────┬─────┘
-                         │ conditional edge (11 routing decisions)
+                         │ conditional edge (12 routing decisions)
           ┌──────────────┼──────────────┐
           ▼              ▼              ▼
-     ┌─────────┐   ┌─────────┐   ┌────────────┐
-     │  ARIA   │   │  Lisa   │   │ Bloodhound │
-     │ (recon) │   │ (scan)  │   │  (vulns)   │
-     └────┬────┘   └────┬────┘   └─────┬──────┘
-          │              │              │
-          └──────────────┴──────────────┘
+     ┌─────────┐   ┌─────────┐   ┌────────────────┐
+     │  ARIA   │   │  Lisa   │   │ Bloodhound     │
+     │ (recon) │   │ (scan)  │   │ + Wasp (PARALLEL)│
+     └────┬────┘   └────┬────┘   └───────┬────────┘
+          │              │                  │
+          └──────────────┴──────────────────┘
                          │
                     ┌────▼─────┐
                     │HUMAN GATE│ ◄── exploitation approval
@@ -78,25 +83,27 @@ WarChief re-evaluates after each phase and routes dynamically. If recon finds no
                                 │ cleanup)   │
                                 └────────────┘
 
+  Bloodhound + Wasp: parallel vuln detection (asyncio.to_thread)
   Loopback paths: WarChief can route back to ARIA/Lisa for deeper recon
   Lateral gate: second human approval before any internal pivot
   Abort: 3+ failed exploits or 5 loops per phase → Bookkeeper
 ```
 
-### WarChief Routing Decisions (11)
+### WarChief Routing Decisions (12)
 
 | Decision | Meaning |
 |----------|---------|
+| `init` | Initial state — WarChief assesses mission parameters |
 | `recon` | Route to ARIA for (deeper) reconnaissance |
 | `scan` | Route to Lisa for (deeper) scanning |
+| `vuln_detection` | Route to Bloodhound+Wasp for parallel vuln detection |
 | `vulns_found_exploit` | Route to human gate, then exploitation |
 | `insufficient_data_abort` | Not enough data, abort to report |
 | `lateral_recon` | Pivot to internal recon (requires lateral gate) |
 | `lateral_scan` | Scan internal targets (requires lateral gate) |
-| `pivot_lateral_recon` | Full pivot — triggers lateral approval gate |
-| `exploit` | Route to exploitation chain |
+| `continue_exploit` | Continue exploitation with remaining vectors |
 | `privesc` | Route to privilege escalation |
-| `exfil` | Route to data exfiltration |
+| `exfiltrate` | Route to data exfiltration |
 | `report` | Route to Bookkeeper — mission complete or abort |
 
 ### Mission State Machine (11 states)
@@ -114,6 +121,7 @@ WarChief re-evaluates after each phase and routes dynamically. If recon finds no
 - **File-based communication** — bots share state through engagement files only
 - **Provider-agnostic** — any LLM provider. Custom gateway support via `base_url`
 - **Two human-in-loop gates** — exploitation gate + lateral movement gate
+- **Parallel vuln detection** — Bloodhound (infrastructure) + Wasp (web apps) run concurrently via `asyncio.to_thread`
 - **Adaptive failure handling** — WAF detection, failed vector tracking, graceful abort
 - **Artifact tracking & cleanup** — dropped tools/payloads tracked, removal attempted, failures flagged in report
 - **Decision audit trail** — every WarChief routing decision logged in report + JSON
@@ -260,6 +268,10 @@ The `ScopeEnforcer` maps categories to tool sets, discovers which tools are actu
 
 Use `base_url` to route to custom gateways: Ollama Cloud, vLLM, LM Studio, Azure OpenAI, etc.
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for full version history.
+
 ## Legal
 
 For authorized security testing only. You must have explicit written permission to test any target. Two human approval gates exist to enforce this — do not bypass them in production use.
@@ -270,4 +282,4 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-**Chimeras v2.0** — Cyberian Defenses
+**Chimeras v2.1** — Cyberian Defenses
