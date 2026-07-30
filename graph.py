@@ -483,13 +483,27 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
             _increment_loop(state, "vuln")
             bot = Bloodhound(state, swarm_config)
             wasp = Wasp(state, swarm_config)
-            # Run both in parallel — Bloodhound for infra, Wasp for web app
-            await asyncio.gather(
-                bot.run(),
-                wasp.run(),
+            # Run both in parallel threads — bot.run() is async but has no
+            # await points (all blocking LLM/subprocess calls are sync).
+            # asyncio.gather alone would run them sequentially on the event
+            # loop. asyncio.to_thread runs each in a real OS thread so they
+            # truly execute in parallel.
+            results = await asyncio.gather(
+                asyncio.to_thread(lambda: asyncio.run(bot.run())),
+                asyncio.to_thread(lambda: asyncio.run(wasp.run())),
+                return_exceptions=True,
             )
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    bot_name = "bloodhound" if i == 0 else "wasp"
+                    print(f"[{bot_name.upper()} ERROR] {result}")
+                    import traceback
+                    traceback.print_exc()
+                    _log_error(state, bot_name.upper(), result)
         except Exception as e:
             print(f"[BLOODHOUND ERROR] {e}")
+            import traceback
+            traceback.print_exc()
             _log_error(state, "BLOODHOUND", e)
         return state
 
