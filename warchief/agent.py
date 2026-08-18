@@ -21,6 +21,7 @@ from core.base_bot import BaseBot
 from core.state import SwarmState
 from core.compliance_brief import ComplianceBrief
 from core.roe_cache import ROEPromptCache
+from core.depth_matrix import DEPTH_MATRIX, DEPTH_FEW_SHOT
 
 
 # ─── Valid routing decisions ───
@@ -229,12 +230,20 @@ class WarChief(BaseBot):
         # v2.3: Inject cached ROE framework
         roe_block = getattr(self, "_cached_roe", "") or ""
 
+        # v2.3: Inject depth matrix + few-shot calibration
+        depth_block = DEPTH_MATRIX + "\n\n" + DEPTH_FEW_SHOT
+
         # v2.3: Inject structured compliance brief (delta-only)
         compliance_delta = self.roe_cache.build_delta(self.state)
+
+        # v2.3: Carry forward previous depth gaps
+        depth_carryforward = self.state.get("depth_gap_carryforward", "")
 
         return f"""{soul_block}You are {self.bot_name}, {self.role_description}.
 
 {roe_block}
+
+{depth_block}
 
 ## Your Scope
 {self.scope_description}
@@ -268,6 +277,8 @@ You MUST output a "decision" field with one of these exact values:
 
 {compliance_delta}
 
+{depth_carryforward}
+
 ## Your Task
 1. Read the engagement files to understand what bots have reported
 2. Assess the current mission state and what has been completed
@@ -289,6 +300,12 @@ Respond ONLY with a JSON block:
   "assessment": "brief summary of current engagement state",
   "scope_change": {{"add": [], "remove": []}},
   "forbid": [],
+  "depth_assessment": [
+    {{"finding": "what was found", "verdict": "thorough|superficial|untouched",
+      "missed_followups": ["specific action missed"],
+      "redispatch_instructions": "exact corrective commands"}}
+  ],
+  "depth_gap_carryforward": "summary of depth gaps for next checkpoint",
   "updated_plan": "markdown plan update for plan.md — include what was done and what's next",
   "mission_phase": "init/recon/scanning/vuln_detection/exploitation/post_exploit/lateral_recon/lateral_scanning/reporting/complete"
 }}
@@ -410,6 +427,40 @@ If you are unsure, default to "scan" to gather more data, or "report" if scope i
                         forbidden.append(cmd)
                 self.state["forbidden_commands"] = forbidden
                 self._log(f"Commands forbidden by WarChief RoE: {forbid}", "ROE")
+
+            # v2.3: Handle depth assessment — quality checking
+            depth_assessment = decision.get("depth_assessment", [])
+            if isinstance(depth_assessment, list) and depth_assessment:
+                shallow_findings = [
+                    da for da in depth_assessment
+                    if isinstance(da, dict) and da.get("verdict") in ("superficial", "untouched")
+                ]
+                if shallow_findings:
+                    # Build redispatch tasks for shallow work
+                    redispatch_list = []
+                    for sf in shallow_findings:
+                        finding = sf.get("finding", "unknown")
+                        missed = sf.get("missed_followups", [])
+                        instructions = sf.get("redispatch_instructions", "")
+                        redispatch_list.append(
+                            f"DEPTH GAP on {finding}: missed {', '.join(missed)}. "
+                            f"Instructions: {instructions}"
+                        )
+                        self._log(f"Depth gap: {finding} — {sf.get('verdict')}", "DEPTH")
+
+                    # Store depth gaps for carryforward to next checkpoint
+                    self.state["depth_gap_carryforward"] = " | ".join(redispatch_list)
+                    self._log(
+                        f"Depth assessment: {len(shallow_findings)} shallow finding(s) flagged "
+                        f"for re-dispatch", "DEPTH"
+                    )
+                else:
+                    self.state["depth_gap_carryforward"] = ""
+                    self._log("Depth assessment: all findings thorough", "DEPTH")
+            else:
+                # No depth assessment provided — clear carryforward
+                if "depth_gap_carryforward" in self.state:
+                    self.state["depth_gap_carryforward"] = ""
 
             # ─── Update mission state machine ───
             mission_phase = decision.get("mission_phase", "")

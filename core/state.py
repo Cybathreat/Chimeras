@@ -163,3 +163,6 @@ class SwarmState(TypedDict, total=False):
     # ─── v2.3: WarChief compliance officer fields ───
     # Commands forbidden by WarChief under RoE enforcement
     forbidden_commands: List[str]
+
+    # Depth gaps carried forward to next checkpoint for quality tracking
+    depth_gap_carryforward: str
