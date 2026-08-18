@@ -100,7 +100,7 @@ class ComplianceBrief:
         flags = []
         # Check for destructive command attempts
         mission_roe = self.state.get("mission", {}).get("roe", "").lower()
-        if "no dos" in mission_roe or "no dos" in mission_roe:
+        if "no dos" in mission_roe or "no denial" in mission_roe or "no destruction" in mission_roe:
             # Check if any bots hit DoS blocks
             failed = self.state.get("failed_vectors", [])
             for f in failed[-3:]:

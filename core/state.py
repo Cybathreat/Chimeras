@@ -166,3 +166,6 @@ class SwarmState(TypedDict, total=False):
 
     # Depth gaps carried forward to next checkpoint for quality tracking
     depth_gap_carryforward: str
+
+    # v2.3: Scope version for tool cache invalidation propagation
+    scope_version: int

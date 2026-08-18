@@ -20,7 +20,6 @@ class ROEPromptCache:
 
     def __init__(self):
         self._cached_system_prompt: Optional[str] = None
-        self._cached_context_hash: Optional[str] = None
         self._last_findings: Set[str] = set()
         self._last_targets: Set[str] = set()
         self._last_scope: str = ""
@@ -73,8 +72,6 @@ Return JSON with these fields:
 - "mission_phase": current phase name
 """
         self._cached_system_prompt = prompt
-        self._cached_context_hash = self._hash_state(state)
-        self._last_scope = scope
         return prompt
 
     def build_delta(self, state: Dict[str, Any]) -> str:
@@ -95,14 +92,25 @@ Return JSON with these fields:
             deltas.append(f"REMOVED TARGETS: {', '.join(sorted(removed_targets))}")
         self._last_targets = current_targets
 
-        # New findings (from reasoning_reports)
+        # v2.3 fix: Track findings by content hash, not bot name.
+        # Previous version added bot names to _last_findings permanently,
+        # so re-runs with new findings were never surfaced as deltas.
         current_reports = state.get("reasoning_reports", {})
         for bot, report in current_reports.items():
             if isinstance(report, dict):
                 summary = report.get("summary", "") or report.get("reasoning", "")
-                if summary and bot not in self._last_findings:
-                    deltas.append(f"NEW REPORT [{bot}]: {summary[:200]}")
-                    self._last_findings.add(bot)
+                if summary:
+                    # Use content hash to detect actual changes
+                    import hashlib
+                    content_hash = hashlib.sha256(summary.encode()).hexdigest()[:16]
+                    cache_key = f"{bot}:{content_hash}"
+                    if cache_key not in self._last_findings:
+                        deltas.append(f"NEW/UPDATED REPORT [{bot}]: {summary[:200]}")
+                        # Remove old entries for this bot, add new one
+                        old_keys = [k for k in self._last_findings if k.startswith(f"{bot}:")]
+                        for k in old_keys:
+                            self._last_findings.discard(k)
+                        self._last_findings.add(cache_key)
 
         # Scope changes
         current_scope = state.get("mission", {}).get("scope", "")
@@ -150,12 +158,6 @@ Return JSON with these fields:
     def get_cached_system(self) -> Optional[str]:
         """Return cached system prompt if built, None otherwise."""
         return self._cached_system_prompt
-
-    def _hash_state(self, state: Dict[str, Any]) -> str:
-        import hashlib
-        mission = state.get("mission", {})
-        raw = f"{mission.get('scope','')}:{mission.get('roe','')}:{mission.get('target','')}"
-        return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
 def _safe_cvss(v: Dict[str, Any]) -> float:

@@ -498,8 +498,9 @@ class TargetValidator:
             - (False, reason) if any target is out of scope
         """
         if not self.mission_scope and not self.internal_scope:
-            # No scope defined — allow (missions without explicit scope)
-            return True, "No scope defined — skipping target validation"
+            # v2.3: Fail CLOSED — no scope = no targeting allowed.
+            # Previously returned (True, "OK") which allowed attacking ANY host.
+            return False, "NO SCOPE DEFINED — target validation cannot proceed. Define a mission scope before executing tools."
 
         ips, hostnames = self._extract_targets(command)
 
@@ -613,14 +614,29 @@ class ScopeEnforcer:
         category = BOT_CATEGORIES.get(bot_name, "none")
         return TOOL_CATEGORIES.get(category, set())
 
+    # v2.3: Module-level cache for installed tools (TTL: 300s)
+    _installed_tools_cache: Set[str] = set()
+    _installed_tools_cache_time: float = 0.0
+    _installed_tools_cache_ttl: float = 300.0
+
     @staticmethod
     def _discover_installed_tools() -> Set[str]:
-        """Dynamically discover which tools are actually installed on the system."""
+        """Dynamically discover which tools are actually installed on the system.
+
+        v2.3: Cached at module level with 5-minute TTL to avoid ~50 shutil.which()
+        calls on every bot init.
+        """
+        import time as _time
+        now = _time.time()
+        if ScopeEnforcer._installed_tools_cache and (now - ScopeEnforcer._installed_tools_cache_time) < ScopeEnforcer._installed_tools_cache_ttl:
+            return ScopeEnforcer._installed_tools_cache
         installed = set()
         for category_tools in TOOL_CATEGORIES.values():
             for tool in category_tools:
                 if shutil.which(tool) or os.path.isfile(f"/usr/local/bin/{tool}") or os.path.isfile(f"/usr/bin/{tool}"):
                     installed.add(tool)
+        ScopeEnforcer._installed_tools_cache = installed
+        ScopeEnforcer._installed_tools_cache_time = now
         return installed
 
     @staticmethod
@@ -709,8 +725,15 @@ class ScopeEnforcer:
             return False, f"SCOPE VIOLATION: {bot_name} cannot use '{tool}'. Allowed: {sorted(allowed_tools)}"
 
         # ─── Check 4: Target/CIDR validation (v2 Phase -1) ───
+        # v2.3: Cache TargetValidator per engagement to avoid re-parsing scope strings
         if mission_scope:
-            validator = TargetValidator(mission_scope, internal_scope)
+            cache_key = f"{mission_scope}|{internal_scope or ''}"
+            if not hasattr(ScopeEnforcer, "_validator_cache"):
+                ScopeEnforcer._validator_cache = {}
+            validator = ScopeEnforcer._validator_cache.get(cache_key)
+            if validator is None:
+                validator = TargetValidator(mission_scope, internal_scope)
+                ScopeEnforcer._validator_cache[cache_key] = validator
             target_ok, target_reason = validator.validate_command(command, bot_name)
             if not target_ok:
                 return False, target_reason

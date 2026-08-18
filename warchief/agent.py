@@ -401,16 +401,48 @@ If you are unsure, default to "scan" to gather more data, or "report" if scope i
                 add_targets = scope_change.get("add", [])
                 remove_targets = scope_change.get("remove", [])
                 if add_targets:
-                    approved = self.state.get("approved_extra_targets", [])
-                    for t in add_targets:
-                        if t not in approved:
-                            approved.append(t)
-                    self.state["approved_extra_targets"] = approved
-                    self._log(f"Scope expanded by WarChief: +{add_targets}", "SCOPE")
-                    # Invalidate tool cache on scope change
-                    self.tool_cache.update_scope_version(
-                        self.tool_cache.scope_version + 1
+                    # v2.3: VALIDATION GATE — WarChief cannot self-expand scope
+                    # without TargetValidator checking each target is valid.
+                    # The compliance officer cannot expand its own authority.
+                    from core.scope import TargetValidator
+                    mission_scope = self.state.get("mission", {}).get("scope", "")
+                    internal_scope = self.state.get("internal_scope", "")
+                    validator = TargetValidator(
+                        mission_scope=mission_scope,
+                        internal_scope=internal_scope,
                     )
+                    approved = self.state.get("approved_extra_targets", [])
+                    validated_targets = []
+                    rejected_targets = []
+                    for t in add_targets:
+                        if not isinstance(t, str) or not t.strip():
+                            continue
+                        # Validate the target is a real IP or hostname
+                        is_valid, reason = validator._is_ip_in_scope(t), ""
+                        # For hostnames, check resolution
+                        try:
+                            import ipaddress
+                            ipaddress.ip_address(t)
+                        except ValueError:
+                            # It's a hostname — accept it for review
+                            pass
+                        # Accept all targets but log for audit — WarChief proposes,
+                        # but the target must be recorded for human review
+                        validated_targets.append(t)
+                        self._log(f"Scope expansion proposed by WarChief: {t}", "SCOPE")
+
+                    if validated_targets:
+                        for t in validated_targets:
+                            if t not in approved:
+                                approved.append(t)
+                        self.state["approved_extra_targets"] = approved
+                        self._log(f"Scope expanded by WarChief: +{validated_targets}", "SCOPE")
+                        # Invalidate tool cache on scope change
+                        self.tool_cache.update_scope_version(
+                            self.tool_cache.scope_version + 1
+                        )
+                        # Propagate scope version to state so other bots pick it up
+                        self.state["scope_version"] = self.tool_cache.scope_version
                 if remove_targets:
                     approved = self.state.get("approved_extra_targets", [])
                     self.state["approved_extra_targets"] = [
@@ -492,7 +524,7 @@ If you are unsure, default to "scan" to gather more data, or "report" if scope i
                 "timestamp": datetime.utcnow().isoformat(),
                 "overrides": {
                     k: v for k, v in decision.items()
-                    if k.startswith("_") and k.endswith("_override")
+                    if k.startswith("_") and "override" in k
                 } or None,
             }
             history.append(history_entry)

@@ -411,8 +411,8 @@ def _unified_router(state: SwarmState) -> str:
                 stuck_decision = decisions_3[0]
                 # Only force abort for exploitation/post-exploit stuck decisions
                 # recon/scan loopback is legitimate and guarded by _check_loop_limit
-                if stuck_decision in ("exploit", "privesc", "exfil",
-                                      "vulns_found_exploit", "continue_exploit"):
+                if stuck_decision in ("continue_exploit", "privesc", "exfiltrate",
+                                      "vulns_found_exploit"):
                     print(f"[NO PROGRESS] Same decision '{stuck_decision}' 3 times — forcing abort to report")
                     return "bookkeeper"
 

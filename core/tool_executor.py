@@ -11,6 +11,7 @@ v2 additions (Phase -1):
 """
 
 import subprocess
+import shlex
 import time
 import re
 from typing import Dict, Any, Optional, List
@@ -19,6 +20,7 @@ from pathlib import Path
 from core.scope import (
     ScopeEnforcer, ScopeViolation, TargetScopeViolation,
     ShellInjectionViolation, DestructiveCommandViolation,
+    SHELL_CAPABLE_CATEGORIES,
 )
 
 
@@ -81,72 +83,44 @@ class ToolExecutor:
         """
         t = timeout or self.timeout
 
-        # v2: Full scope enforcement — destructive/DoS, injection, category, target
-        if self.bot_name:
-            try:
-                ScopeEnforcer.enforce(
-                    self.bot_name, command,
-                    mission_scope=self.mission_scope or None,
-                    internal_scope=self.internal_scope or None,
-                    roe=self.roe or None,
-                )
-            except DestructiveCommandViolation as e:
-                return {
-                    "command": command,
-                    "exit_code": -2,
-                    "stdout": "",
-                    "stderr": str(e),
-                    "duration_sec": 0,
-                    "success": False,
-                    "scope_blocked": True,
-                    "violation_type": "destructive_or_dos_command",
-                }
-            except ShellInjectionViolation as e:
-                return {
-                    "command": command,
-                    "exit_code": -2,
-                    "stdout": "",
-                    "stderr": str(e),
-                    "duration_sec": 0,
-                    "success": False,
-                    "scope_blocked": True,
-                    "violation_type": "shell_injection",
-                }
-            except TargetScopeViolation as e:
-                return {
-                    "command": command,
-                    "exit_code": -2,
-                    "stdout": "",
-                    "stderr": str(e),
-                    "duration_sec": 0,
-                    "success": False,
-                    "scope_blocked": True,
-                    "violation_type": "target_out_of_scope",
-                }
-            except ScopeViolation as e:
-                return {
-                    "command": command,
-                    "exit_code": -2,
-                    "stdout": "",
-                    "stderr": str(e),
-                    "duration_sec": 0,
-                    "success": False,
-                    "scope_blocked": True,
-                    "violation_type": "tool_category",
-                }
+        # v2.3: Scope enforcement moved to BaseBot._run_tool() which calls
+        # ScopeEnforcer.check() before invoking executor.run().
+        # This eliminates the double/triple checking that was happening:
+        # _run_tool() → check() then executor.run() → enforce() → check() again.
+        # Now _run_tool() does the single check and executor.run() just executes.
 
         command = self._sanitize_command(command)
         start = time.time()
 
+        # v2.3: Security — use shell=False for non-shell-capable bots.
+        # Shell-capable bots (exploitation, privesc, exfiltration, payload_fab)
+        # legitimately need pipes/chaining. Non-shell bots get shlex.split()
+        # to prevent any shell metacharacter execution.
+        bot_category = ScopeEnforcer.get_bot_category(self.bot_name) if self.bot_name else ""
+        use_shell = bot_category in SHELL_CAPABLE_CATEGORIES
+
         try:
-            result = subprocess.run(
-                command,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=t,
-                cwd=self.workdir,
-            )
+            if use_shell:
+                # Shell-capable bots — keep shell=True (they need pipes/chains)
+                result = subprocess.run(
+                    command,
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=t,
+                    cwd=self.workdir,
+                )
+            else:
+                # Non-shell bots — use arg array, no shell interpretation
+                cmd_list = shlex.split(command)
+                result = subprocess.run(
+                    cmd_list,
+                    shell=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=t,
+                    cwd=self.workdir,
+                )
             elapsed = time.time() - start
             return {
                 "command": command,

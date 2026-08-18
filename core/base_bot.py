@@ -17,7 +17,6 @@ from core.llm_router import LLMRouter
 from core.tool_executor import ToolExecutor
 from core.scope import ScopeEnforcer
 from core.state import SwarmState
-from core.llm_retry import llm_retry, LLMRetryError
 from core.json_parser import parse_llm_json
 from core.telemetry import Telemetry
 from core.tool_cache import ToolCache
@@ -64,7 +63,11 @@ class BaseBot(ABC):
 
         # v2.3: Telemetry, tool cache, critical findings buffer
         self.telemetry = Telemetry(self.engagement_dir)
-        self.tool_cache = ToolCache(self.engagement_dir)
+        # v2.3 fix: Read scope_version from state so WarChief's invalidation propagates
+        self.tool_cache = ToolCache(
+            self.engagement_dir,
+            scope_version=self.state.get("scope_version", 0)
+        )
         self.critical_buffer = CriticalFindingsBuffer(self.engagement_dir)
 
     def _load_soul(self) -> str:
@@ -217,14 +220,18 @@ class BaseBot(ABC):
             if not target:
                 return
 
-            # Skip AWS metadata IPs, localhost, and private IPs — these are never scope candidates
+            # Skip AWS metadata IPs, localhost — these are never scope candidates
             if target in ("169.254.169.254", "127.0.0.1", "localhost"):
                 return
-            if target.startswith(("10.", "172.16.", "172.17.", "172.18.", "172.19.",
-                                   "172.20.", "172.21.", "172.22.", "172.23.", "172.24.",
-                                   "172.25.", "172.26.", "172.27.", "172.28.", "172.29.",
-                                   "172.30.", "172.31.", "192.168.")):
-                return
+            # v2.3: Use stdlib ipaddress.is_private instead of hardcoded prefix list
+            try:
+                import ipaddress
+                ip = ipaddress.ip_address(target)
+                if ip.is_private or ip.is_loopback or ip.is_link_local:
+                    return
+            except ValueError:
+                # Not an IP — could be a hostname, let it through
+                pass
 
             candidates = self.state.get("scope_expansion_candidates", [])
             if not isinstance(candidates, list):
@@ -332,6 +339,37 @@ class BaseBot(ABC):
 
     # ─── Engagement file I/O ───
 
+    @staticmethod
+    def _sanitize_for_llm(text: str) -> str:
+        """v2.3: Sanitize tool output before LLM re-ingestion.
+
+        Strips prompt injection vectors from tool output that could
+        cause the LLM to execute unintended commands:
+        - Remove ANSI escape sequences (terminal control)
+        - Remove null bytes
+        - Remove common prompt injection patterns
+        - Cap line length to prevent oversized injection payloads
+        """
+        if not text:
+            return text
+        import re as _re
+        # Strip ANSI escape sequences
+        text = _re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', text)
+        # Strip null bytes
+        text = text.replace('\x00', '')
+        # Strip other control characters except newline/tab
+        text = _re.sub(r'[\x01-\x08\x0b\x0c\x0e-\x1f]', '', text)
+        # Neutralize common prompt injection patterns from tool banners
+        # e.g., "IGNORE PREVIOUS INSTRUCTIONS" or "```json" in tool output
+        text = _re.sub(r'(?i)ignore\s+(previous|all|prior)\s+instructions?', '[SANITIZED]', text)
+        text = _re.sub(r'(?i)disregard\s+(previous|all|prior)', '[SANITIZED]', text)
+        text = _re.sub(r'(?i)you\s+are\s+now\s+a', '[SANITIZED]', text)
+        text = _re.sub(r'(?i)system\s+prompt:', '[SANITIZED]', text)
+        # Cap individual line length to prevent oversized payloads
+        lines = text.split('\n')
+        capped_lines = [line[:500] if len(line) > 500 else line for line in lines]
+        return '\n'.join(capped_lines)
+
     def _read_file(self, filename: str) -> str:
         """Read an engagement file."""
         p = self.engagement_dir / filename
@@ -350,13 +388,25 @@ class BaseBot(ABC):
         return self._read_file(f"{bot_name}.md")
 
     def _append_log(self, entry: str):
+        import fcntl
         p = self.engagement_dir / "log.md"
+        p.parent.mkdir(parents=True, exist_ok=True)
         with open(p, "a") as f:
+            try:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            except (OSError, ImportError):
+                pass  # fcntl not available on all platforms
             f.write(f"[{datetime.utcnow().isoformat()}] [{self.bot_name.upper()}] {entry}\n")
 
     def _append_findings(self, section: str, content: str):
+        import fcntl
         p = self.engagement_dir / "findings.md"
+        p.parent.mkdir(parents=True, exist_ok=True)
         with open(p, "a") as f:
+            try:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            except (OSError, ImportError):
+                pass
             f.write(f"\n### [{self.bot_name.upper()}] {section}\n\n{content}\n")
 
     def _write_bot_file(self, content: str):
@@ -384,19 +434,16 @@ class BaseBot(ABC):
         """Build context string from engagement files for the LLM.
 
         v2 Phase 0: Context truncation via rolling digest.
-        Instead of re-reading full files (which grows unbounded with loop
-        cycles), we use a rolling digest strategy:
-          - findings.md: last 2000 chars (recent findings matter most)
-          - log.md: last 500 chars (recent activity)
-          - plan.md: last 1500 chars (latest WarChief assessment)
-          - bot files: last 500 chars each (summary, not full)
-          - WarChief's last decision: included explicitly
+        v2.3: Tool output sanitized before LLM re-ingestion to prevent
+        prompt injection from tool banners/headers.
         """
         findings = self._read_findings()
         plan = self._read_plan()
 
+        # v2.3: Sanitize findings — strip prompt injection vectors
+        findings = self._sanitize_for_llm(findings)
+
         # v2: Rolling digest — truncate each source to recent content
-        # This prevents context window explosion across loop cycles
         findings_digest = findings[-2000:] if len(findings) > 2000 else findings
         plan_digest = plan[-1500:] if len(plan) > 1500 else plan
 

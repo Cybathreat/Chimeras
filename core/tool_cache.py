@@ -57,8 +57,11 @@ class ToolCache:
             # Check TTL
             if time.time() - entry.get("cached_at", 0) > self.ttl:
                 return None  # expired
-            entry["cached"] = True
-            return entry.get("result")
+            # v2.3 fix: Return result WITH cached flag set on the result dict itself
+            result = entry.get("result")
+            if result and isinstance(result, dict):
+                result["cached"] = True
+            return result
         except Exception:
             return None  # cache miss on any error
 
