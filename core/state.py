@@ -159,3 +159,7 @@ class SwarmState(TypedDict, total=False):
 
     # Targets the user has approved for scope expansion (added to mission scope)
     approved_extra_targets: List[str]
+
+    # ─── v2.3: WarChief compliance officer fields ───
+    # Commands forbidden by WarChief under RoE enforcement
+    forbidden_commands: List[str]

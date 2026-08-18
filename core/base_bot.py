@@ -17,6 +17,11 @@ from core.llm_router import LLMRouter
 from core.tool_executor import ToolExecutor
 from core.scope import ScopeEnforcer
 from core.state import SwarmState
+from core.llm_retry import llm_retry, LLMRetryError
+from core.json_parser import parse_llm_json
+from core.telemetry import Telemetry
+from core.tool_cache import ToolCache
+from core.critical_buffer import CriticalFindingsBuffer
 
 
 class BaseBot(ABC):
@@ -56,6 +61,11 @@ class BaseBot(ABC):
         )
         self.engagement_dir: Optional[Path] = None
         self._resolve_engagement_dir()
+
+        # v2.3: Telemetry, tool cache, critical findings buffer
+        self.telemetry = Telemetry(self.engagement_dir)
+        self.tool_cache = ToolCache(self.engagement_dir)
+        self.critical_buffer = CriticalFindingsBuffer(self.engagement_dir)
 
     def _load_soul(self) -> str:
         """Load soul.md from the bot's directory. Returns empty string if not found.
@@ -113,96 +123,74 @@ class BaseBot(ABC):
     # ─── LLM calls ───
 
     def _llm(self, prompt: str, system: Optional[str] = None, **kwargs) -> str:
-        """Call LLM. Raises on failure — no silent fallback."""
+        """Call LLM with retry + telemetry. Raises on failure — no silent fallback."""
         import inspect
-        try:
-            result = self.llm_router.generate(prompt, system, **kwargs)
-            if inspect.isawaitable(result):
-                import asyncio
-                try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        import concurrent.futures
-                        with concurrent.futures.ThreadPoolExecutor() as pool:
-                            future = pool.submit(lambda: asyncio.run(result))
-                            return future.result(timeout=300)
-                    else:
+        import time as _time
+
+        start = _time.monotonic()
+        attempt = 0
+        max_attempts = 3
+        base_delay = 2.0
+        last_error = None
+
+        while attempt < max_attempts:
+            attempt += 1
+            try:
+                result = self.llm_router.generate(prompt, system, **kwargs)
+                if inspect.isawaitable(result):
+                    import asyncio
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            import concurrent.futures
+                            with concurrent.futures.ThreadPoolExecutor() as pool:
+                                future = pool.submit(lambda: asyncio.run(result))
+                                return future.result(timeout=300)
+                        else:
+                            return asyncio.run(result)
+                    except RuntimeError:
                         return asyncio.run(result)
-                except RuntimeError:
-                    return asyncio.run(result)
-            return result
-        except Exception as e:
-            raise RuntimeError(f"LLM call failed for {self.bot_name}: {e}")
+                # v2.3: Telemetry
+                duration = _time.monotonic() - start
+                self.telemetry.record(
+                    self.bot_name, "llm_call", self.state.get("mission_state", ""),
+                    duration, success=True
+                )
+                return result
+            except (ValueError, TypeError, KeyError) as e:
+                # Logic errors — don't retry
+                duration = _time.monotonic() - start
+                self.telemetry.record(
+                    self.bot_name, "llm_call", self.state.get("mission_state", ""),
+                    duration, success=False, error=str(e)
+                )
+                raise RuntimeError(f"LLM call failed for {self.bot_name}: {e}")
+            except Exception as e:
+                last_error = e
+                error_msg = str(e).lower()
+                retryable = any(k in error_msg for k in ("rate", "429", "timeout", "connection", "503", "502", "500", "overloaded", "reset"))
+                if not retryable or attempt >= max_attempts:
+                    duration = _time.monotonic() - start
+                    self.telemetry.record(
+                        self.bot_name, "llm_call", self.state.get("mission_state", ""),
+                        duration, success=False, error=str(e)
+                    )
+                    raise RuntimeError(f"LLM call failed for {self.bot_name} after {attempt} attempts: {e}")
+                delay = min(base_delay * (2 ** (attempt - 1)), 30.0)
+                self._log(f"LLM retry {attempt}/{max_attempts} after {delay:.1f}s: {e}", "RETRY")
+                _time.sleep(delay)
+
+        # Should not reach here, but just in case
+        raise RuntimeError(f"LLM call failed for {self.bot_name}: {last_error}")
 
     def _parse_json_response(self, response: str) -> Dict[str, Any]:
-        """Parse JSON from LLM response. Handles markdown code blocks and partial JSON."""
-        if not response or not response.strip():
-            raise ValueError("Empty LLM response")
-
-        # Strip markdown code block wrappers: ```json\n...\n``` or ```\n...\n```
-        # Also handle cases where closing ``` is missing or truncated
-        stripped = response.strip()
-
-        # Remove leading ```json or ``` and trailing ```
-        if stripped.startswith('```'):
-            # Remove opening line
-            first_newline = stripped.find('\n')
-            if first_newline != -1:
-                stripped = stripped[first_newline + 1:]
-            # Remove trailing ``` if present
-            if stripped.rstrip().endswith('```'):
-                stripped = stripped.rstrip()[:-3].rstrip()
-
-        # Try parsing the stripped version first
+        """Parse JSON from LLM response using v2.3 hardened parser."""
         try:
-            return json.loads(stripped)
-        except json.JSONDecodeError:
-            pass
-
-        # Try ```json ... ``` blocks (original approach, handles multiple blocks)
-        json_blocks = re.findall(r'```(?:json)?\s*\n?(.*?)\n?```', response, re.DOTALL)
-        for block in json_blocks:
-            try:
-                return json.loads(block)
-            except json.JSONDecodeError:
-                continue
-
-        # Try bare { ... } (greedy, handles nested braces)
-        depth = 0
-        start = -1
-        for i, c in enumerate(response):
-            if c == '{':
-                if depth == 0:
-                    start = i
-                depth += 1
-            elif c == '}':
-                depth -= 1
-                if depth == 0 and start >= 0:
-                    try:
-                        return json.loads(response[start:i+1])
-                    except json.JSONDecodeError:
-                        start = -1
-
-        # Try entire response as-is
-        try:
-            return json.loads(response)
-        except json.JSONDecodeError:
-            pass
-
-        # v2.1: Check if response was truncated (starts with { but no closing })
-        # This happens when max_tokens is hit mid-JSON. Log clearly, don't crash.
-        stripped_response = stripped if stripped.startswith('{') else response
-        if '{' in stripped_response:
-            open_braces = stripped_response.count('{')
-            close_braces = stripped_response.count('}')
-            if open_braces > close_braces:
-                raise ValueError(
-                    f"LLM response appears truncated (open braces: {open_braces}, "
-                    f"close braces: {close_braces}). Likely max_tokens limit hit. "
-                    f"Response starts: {response[:200]}..."
-                )
-
-        raise ValueError(f"Could not parse JSON from LLM response: {response[:300]}...")
+            return parse_llm_json(response)
+        except ValueError:
+            raise
+        except Exception as e:
+            raise ValueError(f"JSON parse error: {e}")
 
     # ─── Tool execution ───
 
@@ -261,12 +249,13 @@ class BaseBot(ABC):
     def _run_tool(self, command: str, timeout: Optional[int] = None) -> Dict[str, Any]:
         """
         Execute a Kali tool. Scope-enforced. Real subprocess.
-        Returns tool result dict.
+        v2.3: Tool result cache + telemetry.
 
-        v2: Scope enforcement now includes shell injection check, tool
-        category check, and target/CIDR validation — all at code level.
-        v2.1: Out-of-scope targets captured for scope expansion debrief.
+        Returns tool result dict.
         """
+        import time as _time
+        start = _time.monotonic()
+
         # v2: Full scope enforcement with target validation
         mission = self.state.get("mission", {})
         mission_scope = mission.get("scope", "")
@@ -288,6 +277,11 @@ class BaseBot(ABC):
             # v2.1: Capture out-of-scope targets for scope expansion debrief
             if "TARGET OUT OF SCOPE" in reason:
                 self._capture_scope_candidate(command, reason)
+            self.telemetry.record(
+                self.bot_name, "tool_exec", self.state.get("mission_state", ""),
+                0, success=False, error=f"SCOPE BLOCKED: {reason}",
+                extra={"command": command[:100]}
+            )
             return {
                 "command": command,
                 "exit_code": -2,
@@ -298,6 +292,20 @@ class BaseBot(ABC):
                 "scope_blocked": True,
             }
 
+        # v2.3: Tool result cache check
+        tool_name = command.split()[0].split("/")[-1] if command.split() else "unknown"
+        target_str = full_scope or "unknown"
+        cached = self.tool_cache.get(tool_name, target_str, command)
+        if cached:
+            self._log(f"CACHE HIT: {tool_name} (cached result)", "CACHE")
+            cached["cached"] = True
+            self.telemetry.record(
+                self.bot_name, "tool_exec", self.state.get("mission_state", ""),
+                _time.monotonic() - start, success=True,
+                extra={"command": command[:100], "cached": True}
+            )
+            return cached
+
         self._log(f"EXEC: {command}", "EXEC")
         result = self.executor.run(command, timeout=timeout)
 
@@ -305,10 +313,20 @@ class BaseBot(ABC):
         raw_dir = self.engagement_dir / "raw"
         raw_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.utcnow().strftime("%H%M%S")
-        tool_name = command.split()[0].split("/")[-1] if command.split() else "unknown"
         raw_file = raw_dir / f"{self.bot_name}_{tool_name}_{ts}.txt"
         self.executor.save_output(result, raw_file)
         self._log(f"Output saved: {raw_file.name} ({result['duration_sec']}s)", "EXEC")
+
+        # v2.3: Cache the result
+        self.tool_cache.put(tool_name, target_str, command, result)
+
+        # v2.3: Telemetry
+        self.telemetry.record(
+            self.bot_name, "tool_exec", self.state.get("mission_state", ""),
+            _time.monotonic() - start, success=result.get("success", True),
+            extra={"command": command[:100], "tool": tool_name,
+                   "exit_code": result.get("exit_code")}
+        )
 
         return result
 
@@ -426,6 +444,12 @@ class BaseBot(ABC):
 
         if findings_digest:
             parts.append(f"## Findings (recent)\n{findings_digest}")
+
+        # v2.3: Critical findings buffer — never truncated
+        critical = self.critical_buffer.format_for_context()
+        if critical:
+            parts.append(critical)
+
         if plan_digest:
             parts.append(f"## Plan (recent)\n{plan_digest}")
         if bot_summaries:
@@ -436,10 +460,16 @@ class BaseBot(ABC):
     def _build_system_prompt(self) -> str:
         """Build the bot's system prompt with soul.md identity and scope enforcement.
 
-        v2: soul.md is loaded at __init__ and prepended to the system prompt.
-        Bots that override _build_system_prompt() call super() first, so the
-        soul is always injected before any bot-specific additions.
+        v2.3: System prompt is cached after first build. Only delta context
+        (WarChief's last decision, aggressiveness) is injected per cycle.
         """
+        # v2.3: Cache the static part of the system prompt
+        if not hasattr(self, "_cached_static_prompt") or self._cached_static_prompt is None:
+            self._cached_static_prompt = self._build_static_system_prompt()
+        return self._cached_static_prompt
+
+    def _build_static_system_prompt(self) -> str:
+        """Build the static part of the system prompt. Called once, cached after."""
         category = ScopeEnforcer.get_bot_category(self.bot_name)
         allowed_tools = sorted(ScopeEnforcer.get_allowed_tools(self.bot_name))
         installed = ScopeEnforcer._discover_installed_tools()

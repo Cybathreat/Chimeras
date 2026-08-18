@@ -19,6 +19,8 @@ import json
 
 from core.base_bot import BaseBot
 from core.state import SwarmState
+from core.compliance_brief import ComplianceBrief
+from core.roe_cache import ROEPromptCache
 
 
 # ─── Valid routing decisions ───
@@ -102,17 +104,22 @@ class WarChief(BaseBot):
             self.state["scope_exhausted"] = False
         if "confidence_threshold" not in self.state:
             self.state["confidence_threshold"] = DEFAULT_CONFIDENCE_THRESHOLD
+        # v2.3: ROE prompt cache + compliance brief
+        self.roe_cache = ROEPromptCache()
+        self.compliance_brief = ComplianceBrief(self.state)
+        self._system_prompt_built = False
 
     def _build_system_prompt(self) -> str:
-        """WarChief system prompt with full decision logic.
+        """WarChief system prompt — cached ROE framework + full decision logic.
 
-        v2 Phase 2 additions:
-        - Mission state machine context
-        - Decision history (last 5 entries for trend awareness)
-        - Confidence threshold guidance
-        - Scope exhaustion warning
-        - Backtracking rule enforcement
+        v2.3: ROE/scope framework is cached once per engagement.
+        Only delta context is injected at each checkpoint.
         """
+        # v2.3: Build ROE cache on first call, reuse after
+        if not self._system_prompt_built:
+            self._cached_roe = self.roe_cache.build_system_prompt(self.state)
+            self._system_prompt_built = True
+
         decisions_help = "\n".join(
             f"  - \"{d}\": {desc}" for d, desc in VALID_DECISIONS.items()
         )
@@ -219,7 +226,15 @@ class WarChief(BaseBot):
         if self._soul:
             soul_block = f"## Your Soul\n\n{self._soul}\n\n---\n\n"
 
+        # v2.3: Inject cached ROE framework
+        roe_block = getattr(self, "_cached_roe", "") or ""
+
+        # v2.3: Inject structured compliance brief (delta-only)
+        compliance_delta = self.roe_cache.build_delta(self.state)
+
         return f"""{soul_block}You are {self.bot_name}, {self.role_description}.
+
+{roe_block}
 
 ## Your Scope
 {self.scope_description}
@@ -251,6 +266,8 @@ You MUST output a "decision" field with one of these exact values:
 - If failed_vectors shows repeated failures on same target → pivot or abort
 {state_info}{backtrack_info}{history_info}{scope_info}{loop_info}{agg_info}{failed_info}{confidence_info}
 
+{compliance_delta}
+
 ## Your Task
 1. Read the engagement files to understand what bots have reported
 2. Assess the current mission state and what has been completed
@@ -270,6 +287,8 @@ Respond ONLY with a JSON block:
   "commands": [],
   "decision": "one of the valid routing decisions above",
   "assessment": "brief summary of current engagement state",
+  "scope_change": {{"add": [], "remove": []}},
+  "forbid": [],
   "updated_plan": "markdown plan update for plan.md — include what was done and what's next",
   "mission_phase": "init/recon/scanning/vuln_detection/exploitation/post_exploit/lateral_recon/lateral_scanning/reporting/complete"
 }}
@@ -358,6 +377,39 @@ If you are unsure, default to "scan" to gather more data, or "report" if scope i
 
             # ─── Store in state ───
             self.state["last_decision"] = raw_decision
+
+            # v2.3: Handle scope_change from WarChief compliance decision
+            scope_change = decision.get("scope_change", {})
+            if isinstance(scope_change, dict):
+                add_targets = scope_change.get("add", [])
+                remove_targets = scope_change.get("remove", [])
+                if add_targets:
+                    approved = self.state.get("approved_extra_targets", [])
+                    for t in add_targets:
+                        if t not in approved:
+                            approved.append(t)
+                    self.state["approved_extra_targets"] = approved
+                    self._log(f"Scope expanded by WarChief: +{add_targets}", "SCOPE")
+                    # Invalidate tool cache on scope change
+                    self.tool_cache.update_scope_version(
+                        self.tool_cache.scope_version + 1
+                    )
+                if remove_targets:
+                    approved = self.state.get("approved_extra_targets", [])
+                    self.state["approved_extra_targets"] = [
+                        t for t in approved if t not in remove_targets
+                    ]
+                    self._log(f"Scope restricted by WarChief: -{remove_targets}", "SCOPE")
+
+            # v2.3: Handle forbidden commands from WarChief RoE enforcement
+            forbid = decision.get("forbid", [])
+            if forbid:
+                forbidden = self.state.get("forbidden_commands", [])
+                for cmd in forbid:
+                    if cmd not in forbidden:
+                        forbidden.append(cmd)
+                self.state["forbidden_commands"] = forbidden
+                self._log(f"Commands forbidden by WarChief RoE: {forbid}", "ROE")
 
             # ─── Update mission state machine ───
             mission_phase = decision.get("mission_phase", "")
