@@ -1,9 +1,7 @@
 <div align="center">
 
-<!-- HEADER -->
-<h1>🔮 Chimeras</h1>
-
-**Autonomous Adaptive AI Pentesting Swarm**
+<!-- HEADER LOGO -->
+<img src="assets/logo.png" alt="Chimeras" width="600">
 
 <p>
   10 AI agents. Each one reasons for itself.<br>
