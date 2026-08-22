@@ -159,9 +159,12 @@ class BaseBot(ABC):
                         return asyncio.run(result)
                 # v2.3: Telemetry
                 duration = _time.monotonic() - start
-                self.telemetry.record(
-                    self.bot_name, "llm_call", self.state.get("mission_state", ""),
-                    duration, success=True
+                # v2.4: Record with provider/model info
+                provider_name = getattr(self.llm_router, 'provider_name', 'unknown')
+                model_name = getattr(self.llm_router, 'model', 'unknown')
+                self.telemetry.record_llm_call(
+                    self.bot_name, provider_name, model_name,
+                    duration, parse_ok=True
                 )
                 return result
             except (ValueError, TypeError, KeyError) as e:
