@@ -22,6 +22,8 @@ import json
 
 from core.base_bot import BaseBot
 from core.state import SwarmState
+from core.report_template import render_report
+from core.findings_store import FindingsStore
 
 
 class Bookkeeper(BaseBot):
@@ -36,6 +38,8 @@ class Bookkeeper(BaseBot):
 
     def __init__(self, state: SwarmState, swarm_config: Optional[Dict[str, Any]] = None):
         super().__init__(state, swarm_config)
+        # v2.4: Findings store for lossless report generation
+        self.findings_store = FindingsStore(self.engagement_dir)
 
     def _build_system_prompt(self) -> str:
         """Override — Bookkeeper doesn't run tools, it reads files and generates reports."""
@@ -193,6 +197,64 @@ Respond with the complete report as markdown. Do NOT wrap in JSON. Do NOT wrap i
 
             # Also write executive summary
             self._write_report("executive_summary.md", report_text[:2000])
+
+            # v2.4: Generate structured report from lossless findings store
+            # The LLM report is the narrative. The structured report is the
+            # deterministic, schema-validated version. Both are written.
+            try:
+                # Merge all per-bot findings into one file
+                self.findings_store.merge_all()
+
+                # Get structured findings for the template
+                structured_findings = self.findings_store.format_for_report()
+                critical_findings = self.findings_store.format_critical_for_report()
+
+                # Extract engagement metadata
+                mission = self.state.get("mission", {})
+                targets = self.state.get("discovered_targets", [])
+                if not targets:
+                    target_str = mission.get("target", "N/A")
+                    targets = [target_str] if target_str else []
+
+                # Decision audit trail
+                decision_log_text = self._read_decision_log() or "N/A"
+
+                # Cleanup status
+                artifacts = self.state.get("target_artifacts", [])
+                if artifacts:
+                    cleanup_status = self._format_artifacts_for_report(artifacts)
+                else:
+                    cleanup_status = "No artifacts left on target."
+
+                # Engagement flow — LLM writes this, we extract from report
+                engagement_flow = "See decision audit trail below.\n\n" + decision_log_text
+
+                # Mission outcome
+                last_decision = self.state.get("last_decision", "report")
+                mission_outcome = f"Engagement ended with decision: {last_decision}"
+
+                # Generate the structured report
+                structured_report = render_report(
+                    engagement_name=mission.get("target", "N/A"),
+                    client_name="",
+                    executive_summary=report_text[:2000],  # LLM writes this
+                    mission_scope=mission.get("scope", "N/A"),
+                    internal_scope=self.state.get("internal_scope", ""),
+                    roe=mission.get("roe", "N/A"),
+                    targets=targets,
+                    findings=structured_findings,
+                    engagement_flow=engagement_flow,
+                    critical_findings=critical_findings,
+                    decision_audit=decision_log_text,
+                    cleanup_status=cleanup_status,
+                    mission_outcome=mission_outcome,
+                )
+
+                self._write_report("structured_report.md", structured_report)
+                self._log(f"Structured report generated: {len(structured_findings)} findings, "
+                          f"{len(critical_findings)} critical", "REPORT")
+            except Exception as e:
+                self._log(f"Structured report generation failed: {e}", "ERROR")
 
             # ─── Phase 4.5: Write cleanup report ───
             cleanup_report = self._generate_cleanup_report()
@@ -427,6 +489,18 @@ Respond with the complete report as markdown. Do NOT wrap in JSON. Do NOT wrap i
                     a for a in artifacts if isinstance(a, dict) and not a.get("cleaned", False)
                 ],
             }
+
+            # v2.4: Add findings store summary to audit
+            try:
+                all_findings = self.findings_store.get_all()
+                audit["findings_total"] = len(all_findings)
+                audit["findings_critical"] = len(self.findings_store.get_critical())
+                audit["findings_by_bot"] = {}
+                for f in all_findings:
+                    bot = f.get("source_bot", "unknown")
+                    audit["findings_by_bot"][bot] = audit["findings_by_bot"].get(bot, 0) + 1
+            except Exception:
+                pass
             return audit
         except Exception as e:
             print(f"[BOOKKEEPER] Failed to generate audit JSON: {e}")
