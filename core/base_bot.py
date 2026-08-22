@@ -21,6 +21,8 @@ from core.json_parser import parse_llm_json
 from core.telemetry import Telemetry
 from core.tool_cache import ToolCache
 from core.critical_buffer import CriticalFindingsBuffer
+from core.findings_store import FindingsStore
+from core.schemas import validate_bot_output, BotDecision, BotAnalysis, compute_content_hash
 
 
 class BaseBot(ABC):
@@ -69,6 +71,8 @@ class BaseBot(ABC):
             scope_version=self.state.get("scope_version", 0)
         )
         self.critical_buffer = CriticalFindingsBuffer(self.engagement_dir)
+        # v2.4: Lossless findings store — per-bot JSONL, never truncated
+        self.findings_store = FindingsStore(self.engagement_dir)
 
     def _load_soul(self) -> str:
         """Load soul.md from the bot's directory. Returns empty string if not found.
@@ -186,10 +190,15 @@ class BaseBot(ABC):
         # Should not reach here, but just in case
         raise RuntimeError(f"LLM call failed for {self.bot_name}: {last_error}")
 
-    def _parse_json_response(self, response: str) -> Dict[str, Any]:
-        """Parse JSON from LLM response using v2.3 hardened parser."""
+    def _parse_json_response(self, response: str, schema=None) -> Dict[str, Any]:
+        """Parse JSON from LLM response using v2.3 hardened parser.
+        v2.4: Optional Pydantic schema validation via validate_bot_output.
+        """
         try:
-            return parse_llm_json(response)
+            data = parse_llm_json(response)
+            if schema is not None:
+                data = validate_bot_output(data, schema)
+            return data
         except ValueError:
             raise
         except Exception as e:
@@ -326,6 +335,13 @@ class BaseBot(ABC):
 
         # v2.3: Cache the result
         self.tool_cache.put(tool_name, target_str, command, result)
+
+        # v2.4: Verification metadata — content_hash for WarChief verification cache
+        stdout_text = result.get("stdout", "") or ""
+        result["content_hash"] = compute_content_hash(stdout_text + command)
+        result["tool_name"] = tool_name
+        result["target"] = target_str
+        result["verified_by_cycle"] = None  # set by WarChief after verification
 
         # v2.3: Telemetry
         self.telemetry.record(
@@ -706,17 +722,51 @@ Timestamp: {datetime.utcnow().isoformat()}
         analysis_system = f"""You are {self.bot_name}, {self.role_description}.
 You have just executed tools and received raw output. Analyze the output and extract structured findings.
 
+v2.4: Output structured_findings as a list of objects, each with:
+- finding_id: "{self.bot_name.upper()[:3]}-NNN" (e.g., "{self.bot_name.upper()[:3]}-001")
+- title: one-line finding title
+- severity: Critical | High | Medium | Low | Info
+- cvss: float 0.0-10.0 (or null if unknown)
+- host: target host/IP (or null)
+- port: target port (or null)
+- service: service name (or null)
+- status: Confirmed | Probable | Theoretical
+- description: technical description
+- risks: business impact
+- attack_vectors: how to exploit
+- poc: exact commands used
+- proof_of_existence: raw tool output proving the finding
+- remediation: one-line fix
+
 Respond ONLY with a JSON block:
 ```json
 {{
   "summary": "brief summary of what was found",
   "findings": ["finding 1", "finding 2"],
+  "structured_findings": [
+    {{
+      "finding_id": "{self.bot_name.upper()[:3]}-001",
+      "title": "...",
+      "severity": "...",
+      "cvss": null,
+      "host": null,
+      "port": null,
+      "service": null,
+      "status": "Confirmed",
+      "description": "...",
+      "risks": "...",
+      "attack_vectors": "...",
+      "poc": "...",
+      "proof_of_existence": "...",
+      "remediation": "..."
+    }}
+  ],
   "structured_data": {{}},
   "recommendations": ["next steps for the next bot in the pipeline"],
   "report_content": "full markdown report of your findings — this goes to findings.md"
 }}
 ```
-No other text. Just the JSON."""
+No other text. Just the JSON."""""
 
         try:
             analysis_response = self._llm(analysis_prompt, analysis_system, max_tokens=8192)
@@ -741,6 +791,27 @@ No other text. Just the JSON."""
         report_content = analysis.get("report_content", analysis.get("summary", ""))
         if report_content:
             self._append_findings(strategy.title(), report_content)
+
+        # v2.4: Save structured findings to lossless JSONL store
+        structured_findings = analysis.get("structured_findings", [])
+        if structured_findings:
+            for finding in structured_findings:
+                if isinstance(finding, dict):
+                    self.findings_store.add(self.bot_name, finding)
+            self._log(f"Saved {len(structured_findings)} structured findings to JSONL", "STORE")
+
+        # Also feed critical findings to the critical buffer
+        if structured_findings:
+            for finding in structured_findings:
+                if isinstance(finding, dict):
+                    cvss = finding.get("cvss")
+                    if cvss and isinstance(cvss, (int, float)) and cvss >= 7.0:
+                        self.critical_buffer.add(
+                            finding_text=finding.get("title", ""),
+                            bot_name=self.bot_name,
+                            cvss=float(cvss),
+                            target=finding.get("host", ""),
+                        )
 
         # Update bot file with analysis
         self._append_bot_file("\n## Analysis\n\n")
