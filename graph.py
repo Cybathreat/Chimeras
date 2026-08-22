@@ -42,6 +42,96 @@ from magician.agent import Magician
 from bookkeeper.agent import Bookkeeper
 
 
+# ─── v2.4: Parallel dispatch utility ───
+
+# Bot dependency map: bots that MUST run sequentially (A depends on B's output)
+# Everything not in this map can parallelize if WarChief approves.
+BOT_DEPENDENCIES = {
+    "pathologist": "surgeon",      # Pathologist builds payloads → Surgeon uses them
+    "surgeon": "magician",          # Surgeon exploits → Magician checks privesc on the shell
+    "magician": "thief",            # Magician escalates → Thief exfiltrates
+}
+
+# Bots that can NEVER parallelize (they are inherently sequential gates)
+SEQUENTIAL_ONLY = {"pathologist", "surgeon", "magician", "thief", "bookkeeper", "warchief"}
+
+# Bots that can run in parallel (recon, scan, detection)
+PARALLEL_CAPABLE = {"aria", "lisa", "bloodhound", "wasp"}
+
+
+def can_parallelize(bot_a: str, bot_b: str) -> bool:
+    """v2.4: Check if two bots can run in parallel.
+
+    Two bots can parallelize if:
+    1. Neither depends on the other (checked via BOT_DEPENDENCIES)
+    2. Both are in PARALLEL_CAPABLE (recon/scan/detection bots)
+    3. They don't share the same tool category (avoid duplicate scans)
+    """
+    # Check dependency: if A depends on B or B depends on A, can't parallelize
+    if BOT_DEPENDENCIES.get(bot_a) == bot_b:
+        return False
+    if BOT_DEPENDENCIES.get(bot_b) == bot_a:
+        return False
+    # Both must be parallel-capable
+    if bot_a in SEQUENTIAL_ONLY or bot_b in SEQUENTIAL_ONLY:
+        return False
+    return True
+
+
+async def dispatch_parallel(bot_list, state, swarm_config):
+    """v2.4: Run multiple bots in parallel via asyncio.to_thread.
+
+    Takes a list of bot classes, instantiates each, and runs them in
+    parallel OS threads. Returns a list of results (or exceptions).
+
+    Each bot writes to its own per-bot findings file (findings_{name}.jsonl)
+    so there are no shared writes during parallel execution.
+
+    Args:
+        bot_list: List of bot classes (e.g., [Bloodhound, Wasp])
+        state: SwarmState (shared read-only during parallel execution)
+        swarm_config: LLM config dict
+
+    Returns:
+        List of (bot_name, result) tuples. result may be Exception.
+    """
+    if not bot_list:
+        return []
+
+    # Instantiate all bots
+    bots = []
+    for bot_cls in bot_list:
+        try:
+            bot = bot_cls(state, swarm_config)
+            bots.append((bot.bot_name, bot))
+        except Exception as e:
+            print(f"[PARALLEL] Failed to instantiate {bot_cls.__name__}: {e}")
+            bots.append((bot_cls.__name__.lower(), e))
+
+    # Run all in parallel
+    async def _run_one(name, bot):
+        if isinstance(bot, Exception):
+            return name, bot
+        try:
+            result = await asyncio.to_thread(lambda: asyncio.run(bot.run()))
+            return name, result
+        except Exception as e:
+            return name, e
+
+    results = await asyncio.gather(
+        *[_run_one(name, bot) for name, bot in bots],
+        return_exceptions=True,
+    )
+
+    # Log any errors
+    for name, result in results:
+        if isinstance(result, Exception):
+            print(f"[{name.upper()} PARALLEL ERROR] {result}")
+            _log_error(state, name.upper(), result)
+
+    return results
+
+
 # ─── Loop counter management ───
 
 def _increment_loop(state: SwarmState, phase: str) -> int:
@@ -512,28 +602,14 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
         return state
 
     async def bloodhound_node(state: SwarmState) -> SwarmState:
-        """Bloodhound — vulnerability detection. Runs Wasp in parallel."""
+        """Bloodhound — vulnerability detection. Runs Wasp in parallel.
+
+        v2.4: Uses dispatch_parallel() utility. Same behavior, generalized.
+        """
         try:
             _increment_loop(state, "vuln")
-            bot = Bloodhound(state, swarm_config)
-            wasp = Wasp(state, swarm_config)
-            # Run both in parallel threads — bot.run() is async but has no
-            # await points (all blocking LLM/subprocess calls are sync).
-            # asyncio.gather alone would run them sequentially on the event
-            # loop. asyncio.to_thread runs each in a real OS thread so they
-            # truly execute in parallel.
-            results = await asyncio.gather(
-                asyncio.to_thread(lambda: asyncio.run(bot.run())),
-                asyncio.to_thread(lambda: asyncio.run(wasp.run())),
-                return_exceptions=True,
-            )
-            for i, result in enumerate(results):
-                if isinstance(result, Exception):
-                    bot_name = "bloodhound" if i == 0 else "wasp"
-                    print(f"[{bot_name.upper()} ERROR] {result}")
-                    import traceback
-                    traceback.print_exc()
-                    _log_error(state, bot_name.upper(), result)
+            # v2.4: Use dispatch_parallel instead of inline asyncio.gather
+            await dispatch_parallel([Bloodhound, Wasp], state, swarm_config)
         except Exception as e:
             print(f"[BLOODHOUND ERROR] {e}")
             import traceback
