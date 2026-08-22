@@ -73,6 +73,10 @@ class BaseBot(ABC):
         self.critical_buffer = CriticalFindingsBuffer(self.engagement_dir)
         # v2.4: Lossless findings store — per-bot JSONL, never truncated
         self.findings_store = FindingsStore(self.engagement_dir)
+        # v2.4: Verification cache — tracks which findings WarChief already verified
+        # Feature-flag: default off until validated. Set via state.
+        self._verification_cache: Dict[str, int] = {}  # content_hash → cycle_number
+        self._enable_verification_cache = self.state.get("enable_verification_cache", False)
 
     def _load_soul(self) -> str:
         """Load soul.md from the bot's directory. Returns empty string if not found.
@@ -206,6 +210,30 @@ class BaseBot(ABC):
             raise
         except Exception as e:
             raise ValueError(f"JSON parse error: {e}")
+
+    def _mark_verified(self, tool_results: List[Dict[str, Any]], cycle_number: int) -> int:
+        """v2.4: Mark tool results as verified by this cycle.
+        Returns count of newly verified results (not previously cached).
+        """
+        newly_verified = 0
+        for result in tool_results:
+            if not isinstance(result, dict):
+                continue
+            content_hash = result.get("content_hash")
+            if not content_hash:
+                continue
+            if content_hash not in self._verification_cache:
+                self._verification_cache[content_hash] = cycle_number
+                result["verified_by_cycle"] = cycle_number
+                newly_verified += 1
+            else:
+                # Already verified — mark with the cached cycle
+                result["verified_by_cycle"] = self._verification_cache[content_hash]
+        return newly_verified
+
+    def _is_verified(self, content_hash: str) -> bool:
+        """v2.4: Check if a content hash has been verified before."""
+        return content_hash in self._verification_cache
 
     # ─── Tool execution ───
 

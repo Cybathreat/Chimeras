@@ -559,6 +559,18 @@ If you are unsure, default to "scan" to gather more data, or "report" if scope i
             # ─── Write decision log (audit trail) ───
             self._log_decision(decision, raw_decision, confidence)
 
+            # v2.4: Verification cache — mark tool results as verified by this cycle
+            # When WarChief reviews findings and makes a decision, all tool results
+            # he reviewed are marked as verified. On the next cycle, if their
+            # content_hash hasn't changed, he can skip re-verifying them.
+            if self._enable_verification_cache and tool_results:
+                # Get current cycle number from loop_count
+                cycle_num = sum(self.state.get("loop_count", {}).values())
+                newly_verified = self._mark_verified(tool_results, cycle_num)
+                if newly_verified > 0:
+                    self._log(f"Verification cache: {newly_verified} new, "
+                              f"{len(tool_results) - newly_verified} cached", "CACHE")
+
             self.state.setdefault("reasoning_reports", {})[self.bot_name] = decision
 
         except Exception as e:
