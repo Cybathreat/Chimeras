@@ -1,12 +1,26 @@
-# Chimeras v2 Development Roadmap
+# Chimeras Development Roadmap
 
 **Scope**: Transform Chimeras from a fixed linear pipeline into a true **adaptive reasoning swarm** where WarChief acts as a real pentester lead: dispatching agents, adapting to findings, improvising when plans fail, and routing dynamically based on what the team discovers.
 
 ---
 
-## Status: COMPLETE ✅
+## v2.4 — COMPLETE ✅
 
-All 9 phases implemented, tested, and pushed to `main`.
+Council-driven efficiency and quality improvements. 4 sprints, all implemented, live-tested, and pushed to `main`.
+
+| Sprint | What Shipped | Commit |
+|--------|-------------|--------|
+| S1 | Pydantic schemas, lossless findings store, telemetry expansion | `088660b`, `8d4e5e4` |
+| S4 | Report template wired into Bookkeeper, structured report | `eda6c2e` |
+| S2 | Verification cache (feature-flagged), content_hash on tool results | `b9feb68` |
+| S3 | dispatch_parallel utility, can_parallelize, bot dependency map | `ab656df` |
+| Soul | WarChief team knowledge — all 9 bots documented | `f9ba2b5` |
+
+**Live tested**: Full engagement against cyberian-defenses.com — 6 min, 285 tool execs, 23 structured findings, 0 parse failures.
+
+---
+
+## v2.0-v2.3 — COMPLETE ✅
 
 | Phase | What Shipped | Commit | Tests |
 |-------|-------------|--------|-------|

@@ -1,0 +1,187 @@
+# CLAUDE.md — Chimeras v2.4 Development Context
+
+## Project
+Chimeras is an autonomous AI pentest swarm with adaptive decision-making. 10 bots (9 specialists + WarChief orchestrator), each powered by an independently assigned LLM, each reasoning autonomously about what tools to run and what strategy to use. No hardcoded tool lists — bots declare a tool category and the LLM picks tools dynamically. WarChief acts as a decision router, re-entering after each phase to adapt the engagement based on actual findings. WarChief is also a compliance officer and quality checker — he verifies every bot's output against real pentest standards.
+
+## Stack
+- Python 3.11+
+- LangGraph (multi-agent orchestration, conditional edges, loopback paths)
+- Rich (TUI pre-flight wizard)
+- Provider-agnostic LLM routing (Anthropic/Google/Groq/OpenRouter/Ollama/OpenAI-compatible)
+- Kali Linux tools executed via subprocess
+- Custom gateway support (any OpenAI/Anthropic-compatible endpoint via `base_url`)
+
+## Core Rules
+- Every bot inherits from `core/base_bot.py`
+- The LLM IS the brain — no hardcoded fallback logic
+- Safe fallback exists only for malformed LLM output (WarChief defaults to `report` route)
+- Tools are NOT hardcoded in bot agents — bots declare a category, scope enforcer maps to installed tools
+- Bots communicate through engagement files (plan.md, log.md, findings.md, per-bot .md) AND per-bot JSONL findings store (v2.4)
+- State is shared via `core/state.py` TypedDict
+- Raw tool output saved to `engagement/raw/` for audit trail
+- WarChief re-enters the graph after each phase — it is NOT a one-shot planner
+- v2.4: Findings are structured (Pydantic schema) and stored in lossless per-bot JSONL files. Evidence is never truncated.
+- v2.4: Tool results carry verification metadata (content_hash, verified_by_cycle) for WarChief's verification cache.
+
+## Bot Order (v2 Adaptive Graph)
+WarChief is the entry point and decision router. After each phase bot completes, the graph routes back to WarChief, which makes a routing decision based on findings:
+
+```
+WarChief (init) → ARIA → WarChief (route) → Lisa → WarChief (route)
+→ Bloodhound+Wasp (parallel vuln detection) → WarChief (route) → [HUMAN GATE] → Pathologist → Surgeon
+→ WarChief (route) → Magician → Thief → WarChief (final) → Bookkeeper → END
+```
+
+Bloodhound and Wasp run in parallel: Bloodhound detects infrastructure vulnerabilities (SSL, CVEs, network services), Wasp detects web application vulnerabilities (XSS, CSRF, SQLi, SSTI, SSRF, LFI/RFI, IDOR, auth bypass). No human approval needed for detection.
+
+WarChief can route back to ARIA or Lisa for deeper recon, pivot to lateral movement (second gate), or abort to Bookkeeper if scope is exhausted or failures accumulate.
+
+## WarChief Routing Decisions (12)
+`init`, `recon`, `scan`, `vuln_detection`, `vulns_found_exploit`, `insufficient_data_abort`, `lateral_recon`, `lateral_scan`, `report`, `continue_exploit`, `privesc`, `exfiltrate`
+
+## Mission State Machine (11 states)
+`init → recon → scanning → vuln_detection → exploitation_prep → exploitation → post_exploit → lateral_recon → lateral_scanning → reporting → complete`
+
+## Human-in-Loop (Two Gates)
+1. **Exploitation gate** — between Bloodhound and exploitation bots. Operator reviews vuln report.
+2. **Lateral movement gate** — before any internal/lateral pivot. Operator reviews discovered internal targets.
+
+`--approve` flag bypasses both gates for headless/piped runs.
+
+## Tool Scoping (Category-based, 3-tier enforcement)
+Bots declare a category in `core/scope.py` (`BOT_CATEGORIES`):
+- ARIA → `passive_recon` (dig, whois, whatweb, wafw00f, subfinder, ...)
+- Lisa → `active_scan` (nmap, nikto, gobuster, ffuf, wpscan, ...)
+- Bloodhound → `vuln_detection` (nuclei, searchsploit, wapiti, ssh-audit, sslscan, ...)
+- Wasp → `web_exploit` (sqlmap, nikto, nuclei, curl, ffuf, wfuzz, dalfox, commix, ...) — runs IN PARALLEL with Bloodhound
+- Pathologist → `payload_fab` (msfvenom, msfconsole, searchsploit, curl)
+- Surgeon → `exploitation` (msfconsole, sqlmap, nc, python3, bash, ...)
+- Magician → `privesc` (linpeas, find, cat, ssh, smbclient, ...)
+- Thief → `exfiltration` (curl, wget, nc, tar, scp, rsync, ...)
+- WarChief/Bookkeeper → `none` (no tool execution)
+
+Three-tier enforcement:
+1. Category check (tool must be in bot's allowed set)
+2. Shell metacharacter check (injection blocked for non-shell categories)
+3. Target validation (`TargetValidator` resolves IPs/hostnames, checks against CIDR scope)
+
+Tools are discovered dynamically via `shutil.which()`. LLM only sees installed tools.
+
+## v2 Key Features
+- **Adaptive routing**: WarChief re-enters after each phase, 11 routing decisions
+- **Loopback paths**: deeper recon, deeper scanning (max 5 cycles per phase)
+- **Lateral movement**: internal recon, lateral scan, lateral exploitation — gated by second human approval
+- **Failure handling**: WAF/IPS detection, failed vector tracking, graceful abort (3+ failed exploits or 3 same decisions)
+- **Scope exhaustion**: 2+ recon cycles with zero new targets → forced report
+- **Confidence threshold**: WarChief confidence < 0.6 → safe conservative route
+- **Artifact tracking**: dropped tools/payloads tracked, cleanup attempted, failures flagged in report
+- **Decision audit trail**: all routing decisions logged in report + `warchief_decisions.log`
+- **Context truncation**: rolling digest of last N entries, not full file re-reads
+- **Config auto-migration**: v1 `swarm-config.json` auto-migrated to v2 on load
+- **TUI wizard**: Rich-based pre-flight with live LLM connectivity check for all 9 bots (`--skip-wizard` to bypass)
+- **WarChief soul**: team knowledge section — WarChief knows all 9 specialists' roles, tools, boundaries, expected output quality, and re-dispatch triggers (v2.4)
+
+## v2.4 Features
+- **Pydantic schema models**: `Finding`, `ToolResult`, `BotDecision`, `BotAnalysis` — structured output from every bot. Schema validation before output reaches WarChief. Fallback when Pydantic not installed.
+- **Lossless findings store**: Per-bot JSONL files (`findings_{bot_name}.jsonl`). Evidence never truncated. Bookkeeper merges at report time. Deduplication by finding_id.
+- **Expanded telemetry**: Per-provider LLM latency, cache hit rate, parse failure rate, token counts. `summary()` for baseline comparison. `record_llm_call()` and `record_tool_exec()` with structured metrics.
+- **Verification cache**: WarChief skips re-verification when tool output content_hash unchanged. Feature-flagged (default off) — enable via `state['enable_verification_cache'] = True`.
+- **Parallel dispatch**: `dispatch_parallel()` utility generalizes Bloodhound+Wasp parallelism. `can_parallelize()` checks bot dependency map. WarChief can emit `parallel_dispatch` list for any parallel-capable combo.
+- **Structured report**: Bookkeeper generates `structured_report.md` from FindingsStore alongside the LLM narrative `final_report.md`. Template-enforced structure: findings table, per-finding sections, critical findings, decision audit, cleanup.
+- **Verification metadata**: Tool results carry `content_hash`, `tool_name`, `target`, `verified_by_cycle` for WarChief's verification cache.
+- **Analysis prompt upgrade**: Bots now asked to output `structured_findings` with full schema (finding_id, severity, cvss, host, port, service, status, description, risks, attack_vectors, poc, proof_of_existence, remediation).
+
+## Package Structure
+```
+Chimeras/
+├── core/
+│   ├── base_bot.py       # Abstract bot — LLM reasoning loop + tool execution + context truncation + v2.4 schemas/findings store
+│   ├── state.py          # LangGraph TypedDict state schema (v2 fields)
+│   ├── llm_router.py     # Universal LLM adapter — 6 providers + custom base_url
+│   ├── tool_executor.py  # Subprocess wrapper with timeout, raw output capture, scope enforcement
+│   ├── scope.py          # Category-based tool scoping + dynamic discovery + TargetValidator + shell injection check
+│   ├── config.py         # ConfigManager with v1→v2 auto-migration
+│   ├── wizard.py         # Rich TUI pre-flight wizard (3-step: config check, LLM connectivity, summary)
+│   ├── schemas.py        # v2.4: Pydantic models (Finding, ToolResult, BotDecision, BotAnalysis)
+│   ├── findings_store.py # v2.4: Lossless per-bot JSONL findings store, file-locked, merged at report time
+│   ├── telemetry.py      # v2.4: JSONL telemetry — per-provider LLM latency, cache hit rate, parse failure rate
+│   ├── tool_cache.py     # v2.3: Tool result cache, scope-invalidated
+│   ├── json_parser.py    # v2.3: Hardened JSON parser — strips fences, brace matching, truncation detection
+│   ├── critical_buffer.py # v2.3: Append-only buffer for CVSS >= 7.0 findings, never truncated
+│   ├── report_template.py # v2.3: Jinja2 report template with schema validation
+│   ├── roe_cache.py      # v2.3: ROE prompt cache for WarChief
+│   ├── depth_matrix.py   # v2.3: Pentest depth assessment matrix for WarChief quality checks
+│   ├── compliance_brief.py # v2.3: Compliance brief builder for WarChief
+│   └── providers/        # Provider implementations
+│       ├── anthropic.py  # Claude Opus/Sonnet/Haiku
+│       ├── google.py     # Gemini
+│       ├── groq.py       # Llama 3.3 70B / Mixtral
+│       ├── openrouter.py # Any model via OpenRouter
+│       ├── openai.py     # GPT-4o / any OpenAI-compatible endpoint
+│       └── ollama.py     # Local Ollama
+├── warchief/
+│   ├── agent.py          # Decision router — 11 routing decisions, state machine, confidence threshold, verification cache
+│   └── soul.md           # WarChief identity, team knowledge (all 9 bots), quality standards, re-dispatch protocol
+├── aria/
+│   ├── agent.py          # Passive recon + lateral recon
+│   └── soul.md           # ARIA identity — scanning philosophy, per-port expertise
+├── lisa/
+│   ├── agent.py          # Active scanning + lateral scan mode
+│   └── soul.md           # Lisa identity — scan types, timing, per-service enumeration
+├── bloodhound/
+│   ├── agent.py          # Vuln detection + WAF/IPS detection + failed vector tracking
+│   └── soul.md           # Bloodhound identity — CVE matching, SSL/TLS, config audit
+├── wasp/
+│   ├── agent.py          # Web app vuln DETECTION — runs parallel with Bloodhound
+│   └── soul.md           # Wasp identity — OWASP Top 10, web layer
+├── pathologist/
+│   └── agent.py          # Payload fabrication
+├── surgeon/
+│   ├── agent.py          # Exploitation + lateral exploitation + failed vector tracking + artifact tracking
+│   └── soul.md           # Surgeon identity — exploitation standards
+├── magician/
+│   └── agent.py          # Privesc + lateral movement + artifact tracking
+├── thief/
+│   └── agent.py          # Exfiltration + failed exfil tracking
+├── bookkeeper/
+│   ├── agent.py          # Report generation + structured report + cleanup + audit JSON + findings merge
+│   └── soul.md           # Bookkeeper identity — report standards
+├── graph.py              # Adaptive LangGraph wiring — conditional edges, loopback, dispatch_parallel, can_parallelize
+├── main.py               # Entry point — wizard integration, v2 state initialization
+└── mission_*/            # Per-operation workspace
+    ├── swarm-config.json  # Per-bot LLM config (auto-migrated v1→v2)
+    ├── mission.md         # Objectives, scope, RoE
+    └── engagement/
+        ├── plan.md         # WarChief's plan + decision audit trail
+        ├── log.md          # Timestamped action log
+        ├── findings.md     # Accumulated findings (markdown, legacy)
+        ├── findings_*.jsonl # v2.4: Per-bot lossless findings store
+        ├── findings.jsonl  # v2.4: Merged findings (written by Bookkeeper)
+        ├── telemetry.jsonl # v2.4: Per-event telemetry log
+        ├── critical_findings.json # v2.3: Critical findings buffer (CVSS >= 7.0)
+        ├── warchief_decisions.log # Machine-readable decision log
+        ├── *.md            # Per-bot work logs
+        ├── raw/            # Raw tool output (audit trail)
+        ├── poc/            # Proof-of-concept artifacts
+        └── report/         # Final report
+            ├── final_report.md       # LLM narrative report
+            ├── structured_report.md  # v2.4: Template-enforced structured report
+            ├── executive_summary.md  # Executive summary
+            ├── cleanup_report.md     # Cleanup & rollback status
+            └── engagement_audit.json # Machine-readable audit with findings summary
+```
+
+## Config
+Per-bot config in `swarm-config.json`. v1 configs auto-migrated to v2 on load:
+```json
+{
+  "version": "2.0",
+  "bots": {
+    "warchief": {"provider": "openai", "model": "glm-5.2", "base_url": "https://ollama.com/v1"}
+  }
+}
+```
+
+## Default Config
+- Ollama: qwen2.5:14b (fallback if no config present)
+- Tested with: glm-5.2 via ollama-cloud (OpenAI-compatible API at `https://ollama.com/v1`)

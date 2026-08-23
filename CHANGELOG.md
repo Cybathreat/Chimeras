@@ -2,7 +2,51 @@
 
 All notable changes to Chimeras. Dates in Paris time (CEST/UTC+2).
 
-## v2.2 — 2026-07-30
+## v2.4 — 2026-08-22
+
+### Added
+- **Pydantic schema models** (`core/schemas.py`) — `Finding`, `ToolResult`, `BotDecision`, `BotAnalysis` with validation. Fallback when Pydantic not installed. `compute_content_hash()` utility. (088660b)
+- **Lossless findings store** (`core/findings_store.py`) — per-bot JSONL files. File-locked writes. `merge_all()`, `get_critical()`, `format_for_report()`, `deduplicate()`. Evidence never truncated. (088660b)
+- **Telemetry expansion** — `record_llm_call()` with provider/model metrics, `record_tool_exec()` with structured tool metrics, `summary()` for baseline comparison (cache hit rate, parse failure rate, per-provider latency). (8d4e5e4)
+- **Verification cache** — WarChief skips re-verification when tool output `content_hash` unchanged. `_mark_verified()`, `_is_verified()` in BaseBot. Feature-flagged (default off). (b9feb68)
+- **Parallel dispatch utility** — `dispatch_parallel()` in graph.py generalizes Bloodhound+Wasp parallelism. `can_parallelize()` checks `BOT_DEPENDENCIES` map. `PARALLEL_CAPABLE` and `SEQUENTIAL_ONLY` sets. (ab656df)
+- **Structured report** — Bookkeeper generates `structured_report.md` from FindingsStore via `render_report()` template. Audit JSON includes `findings_total`, `findings_critical`, `findings_by_bot`. (eda6c2e)
+- **WarChief soul: team knowledge** — all 9 specialists documented with roles, tool categories, boundaries, expected output, re-dispatch triggers, dependency map, parallel dispatch instructions. (f9ba2b5)
+- **Verification metadata on tool results** — `content_hash`, `tool_name`, `target`, `verified_by_cycle` added to every tool execution result. (088660b)
+- **Analysis prompt upgrade** — bots now asked to output `structured_findings` with full schema (finding_id, severity, cvss, host, port, service, status, description, risks, attack_vectors, poc, proof_of_existence, remediation). (088660b)
+
+### Changed
+- **base_bot.py** — imports schemas, FindingsStore, compute_content_hash. `_parse_json_response()` accepts optional schema for validation. Tool results carry verification metadata. Analysis output saves structured findings to JSONL and feeds critical findings to critical_buffer.
+- **warchief/agent.py** — `_update_state()` marks tool results as verified after each decision cycle (when feature-flag enabled).
+- **bookkeeper/agent.py** — imports `render_report` and `FindingsStore`. Generates structured report alongside LLM narrative. Merges per-bot JSONL findings. Audit JSON includes findings summary.
+- **graph.py** — `bloodhound_node` refactored to use `dispatch_parallel([Bloodhound, Wasp])` instead of inline asyncio.gather. Added `BOT_DEPENDENCIES`, `can_parallelize()`, `dispatch_parallel()`.
+- **telemetry.py** — LLM calls now record `provider_name` and `model` via `record_llm_call()` instead of generic `record()`.
+
+### Live Tested
+- Full engagement against cyberian-defenses.com: 6 min, 285 tool executions, 11 LLM calls, 7 cache hits, 0 parse failures, 23 structured findings, 3 WarChief decisions. Structured report and audit JSON generated successfully.
+
+---
+
+## v2.3 — 2026-08-18
+
+### Added
+- **Hardened JSON parser** (`core/json_parser.py`) — strips markdown fences, brace matching, truncation detection, optional Pydantic validation. Replaces inline `_parse_json_response` in base_bot.py.
+- **Telemetry logger** (`core/telemetry.py`) — JSONL telemetry for every LLM call and tool execution. Context manager for timing blocks.
+- **Tool result cache** (`core/tool_cache.py`) — file-based cache keyed by (scope_version, tool, target, args). Scope-invalidated. WarChief can force-invalidate.
+- **Critical findings buffer** (`core/critical_buffer.py`) — append-only buffer for CVSS >= 7.0 findings. Never truncated. Read first by WarChief and Bookkeeper.
+- **Report template** (`core/report_template.py`) — Jinja2 template with schema validation. Fallback f-string renderer. Full pentest report structure.
+- **ROE prompt cache** (`core/roe_cache.py`) — caches WarChief's system prompt ROE block. Delta injection for scope changes.
+- **Depth matrix** (`core/depth_matrix.py`) — pentest depth assessment categories for WarChief's quality checks.
+- **Compliance brief** (`core/compliance_brief.py`) — compliance brief builder for WarChief's ROE enforcement.
+- **WarChief compliance officer** — `forbidden_commands`, `depth_gap_carryforward`, `scope_version` fields in state. WarChief enforces RoE, checks scope expansion, invalidates cache on scope change.
+- **18 bug fixes from Council code review** — P0 security + P1 integrity + P2 performance. (6ad4b27)
+- **Council-rewritten souls** — ARIA, Lisa, Bloodhound soul.md files rewritten through multi-LLM council debate. Embedded real pentest domain expertise.
+
+### Changed
+- **base_bot.py** — imports json_parser, telemetry, tool_cache, critical_buffer. Tool cache check before execution. Telemetry on every LLM call and tool exec. Sanitize tool output for prompt injection. Static system prompt caching.
+- **warchief/agent.py** — imports compliance_brief, roe_cache, depth_matrix. ROE cache for system prompt. Delta context injection. Depth assessment per finding. Scope version tracking.
+
+---
 
 ### Added
 - **Destructive/DoS command blocklist** — code-level enforcement of Rules of Engagement. `rm -rf`, `mkfs`, `dd of=/dev/`, fork bombs, `DROP TABLE`, `TRUNCATE TABLE`, `shutdown/reboot/halt`, Windows `format`, and flood-rate scan flags (nmap `--max-rate >=100000`, hping3 `--flood`, slowloris, goldeneye) are blocked before execution, independent of tool category. Hard destructive patterns always blocked; DoS-capable flags blocked when RoE restricts DoS or when no RoE is supplied (fail safe). `DestructiveCommandViolation` exception class added to `core/scope.py`.
