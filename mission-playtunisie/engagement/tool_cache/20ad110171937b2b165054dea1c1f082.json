@@ -1,0 +1,1 @@
+{"cached_at": 1787534877.6556094, "scope_version": 1, "tool": "whatweb", "target": "playtunisie.com, playtunisie.com", "result": {"command": "whatweb -a 3 https://playtunisie.com", "exit_code": 0, "stdout": "", "stderr": "\u001b[1m\u001b[31mERROR Opening: https://playtunisie.com - execution expired\u001b[0m\n", "duration_sec": 16.44, "success": true}}

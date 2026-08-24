@@ -80,7 +80,13 @@ def parse_scope_from_mission(mission_path: Path) -> str:
 
 
 async def run_operation(mission_dir: Path, swarm_config: dict, auto_approve: bool = False, resume: bool = False) -> SwarmState:
-    """Execute a full Chimeras operation."""
+    """Execute a full Chimeras operation.
+
+    v2.5: --resume now loads graph state from checkpoint.json instead of
+    just preserving engagement files. The graph continues from the last
+    completed phase, not from scratch.
+    """
+    from core.checkpoint import load_checkpoint
 
     engagement_dir = mission_dir / "engagement"
     mission_path = mission_dir / "mission.md"
@@ -89,6 +95,16 @@ async def run_operation(mission_dir: Path, swarm_config: dict, auto_approve: boo
     # Previous runs leave stale files that poison WarChief's context
     if not resume:
         _clean_engagement_dir(engagement_dir)
+
+    # v2.5: Try to load checkpoint if resuming
+    saved_state = None
+    if resume:
+        saved_state = load_checkpoint(engagement_dir)
+        if saved_state:
+            print(f"[RESUME] Loaded checkpoint from {engagement_dir / 'checkpoint.json'}")
+            print(f"[RESUME] Continuing from phase: {saved_state.get('mission_state', 'unknown')}")
+        else:
+            print("[RESUME] No checkpoint found — starting fresh")
 
     # Parse scope from mission file
     target_scope = parse_scope_from_mission(mission_path)
@@ -108,8 +124,8 @@ async def run_operation(mission_dir: Path, swarm_config: dict, auto_approve: boo
             "lateral_objectives": lateral_objectives,
         },
         swarm_config=swarm_config,
-        human_approval=False,
-        lateral_approval=False,       # v2: lateral gate starts as False
+        human_approval=auto_approve,          # v2.5: set from auto_approve so --resume with --approve works
+        lateral_approval=auto_approve,        # v2.5: same
         abort_flag=False,
         engagement_dir=str(engagement_dir),
         # v2: initialize new state fields
@@ -134,6 +150,19 @@ async def run_operation(mission_dir: Path, swarm_config: dict, auto_approve: boo
         scope_expansion_candidates=[],
         approved_extra_targets=[],
     )
+
+    # v2.5: Override with saved state if resuming from checkpoint
+    if saved_state:
+        for key, value in saved_state.items():
+            if key not in ("swarm_config",):  # Don't override config — use the one passed in
+                state[key] = value
+        # Re-apply auto_approve in case --approve was passed with --resume
+        if auto_approve:
+            state["human_approval"] = True
+            state["lateral_approval"] = True
+        print(f"[RESUME] State restored: {len(saved_state)} keys loaded")
+        print(f"[RESUME] Last phase: {state.get('mission_state', 'unknown')}")
+        print(f"[RESUME] Last decision: {state.get('last_decision', 'unknown')}")
 
     # v2 Phase 3: Store internal scope in state for ToolExecutor target validation
     # ToolExecutor reads this when lateral_approval is granted

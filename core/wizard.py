@@ -40,15 +40,15 @@ BOT_INFO = {
     "aria":       {"role": "Passive Recon",     "icon": "🔍"},
     "lisa":       {"role": "Active Scanner",    "icon": "📡"},
     "bloodhound": {"role": "Vuln Detection",   "icon": "🩺"},
-    "pathologist": {"role": "Payload Fab",     "icon": "💉"},
-    "surgeon":    {"role": "Exploitation",      "icon": "⚔️"},
+    "wasp":        {"role": "Web Vuln Det",    "icon": "🐝"},
+    "marksman":   {"role": "Exploit Ops",      "icon": "🎯"},
     "magician":   {"role": "Privilege Esc",     "icon": "🎩"},
     "thief":      {"role": "Exfiltration",      "icon": "📦"},
     "bookkeeper": {"role": "Report Writer",    "icon": "📝"},
 }
 
-BOT_ORDER = ["warchief", "aria", "lisa", "bloodhound", "pathologist",
-             "surgeon", "magician", "thief", "bookkeeper"]
+BOT_ORDER = ["warchief", "aria", "lisa", "bloodhound", "wasp", "marksman",
+             "magician", "thief", "bookkeeper"]
 
 
 def print_banner():

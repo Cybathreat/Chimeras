@@ -1,0 +1,9 @@
+{"timestamp": "2026-08-24T01:20:54.918675", "bot": "lisa", "cvss": 7.5, "target": "34.76.215.208", "tool": "", "finding": "nginx 1.10.3 (EOL) running on ports 80 and 443"}
+{"timestamp": "2026-08-24T01:21:54.869529", "bot": "warchief", "cvss": 7.5, "target": "34.76.215.208", "tool": "", "finding": "EOL nginx 1.10.3 \u2014 CVE-2017-7529 candidate"}
+{"timestamp": "2026-08-24T01:33:51.685789", "bot": "warchief", "cvss": 7.5, "target": "playtunisie.com", "tool": "", "finding": "nginx 1.10.3 EOL \u2014 Multiple Known CVEs"}
+{"timestamp": "2026-08-24T01:35:05.012483", "bot": "warchief", "cvss": 7.5, "target": "34.76.215.208", "tool": "", "finding": "nginx 1.10.3 EOL \u2014 Multiple Known CVEs"}
+{"timestamp": "2026-08-24T01:35:47.598530", "bot": "warchief", "cvss": 7.5, "target": "34.76.215.208", "tool": "", "finding": "nginx 1.10.3 EOL \u2014 CVE-2017-7529 Candidate"}
+{"timestamp": "2026-08-24T01:37:43.676252", "bot": "bloodhound", "cvss": 7.5, "target": "playtunisie.com", "tool": "", "finding": "nginx 1.10.3 \u2014 End-of-Life with Known Critical CVEs"}
+{"timestamp": "2026-08-24T01:45:01.690072", "bot": "wasp", "cvss": 7.5, "target": "playtunisie.com", "tool": "", "finding": "EOL nginx 1.10.3 with known vulnerabilities (CVE-2017-7529)"}
+{"timestamp": "2026-08-24T01:45:58.100643", "bot": "warchief", "cvss": 7.5, "target": "playtunisie.com", "tool": "", "finding": "EOL nginx 1.10.3 \u2014 CVE-2017-7529 Candidate"}
+{"timestamp": "2026-08-24T01:46:55.228606", "bot": "warchief", "cvss": 7.5, "target": "playtunisie.com", "tool": "", "finding": "nginx 1.10.3 EOL \u2014 CVE-2017-7529 Range Header Filter Bypass Candidate"}

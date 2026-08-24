@@ -1,0 +1,334 @@
+{
+  "saved_at": "2026-08-24T01:42:00.505674",
+  "mission_state": "recon",
+  "last_decision": "recon",
+  "state": {
+    "mission": {
+      "name": "Op CyberAcrest",
+      "path": "mission-cybacrest/mission.md",
+      "created": "2026-08-24T01:38:16.796903",
+      "scope": "cybacrest.com",
+      "target": "cybacrest.com",
+      "lateral_objectives": "",
+      "phase": "recon"
+    },
+    "swarm_config": {
+      "version": "2.0",
+      "created": "2026-08-24T01:38:16.796903",
+      "mission_name": "Op CyberAcrest",
+      "bots": {
+        "warchief": {
+          "provider": "openai",
+          "model": "glm-5.2",
+          "base_url": "https://ollama.com/v1"
+        },
+        "aria": {
+          "provider": "openai",
+          "model": "glm-5.2",
+          "base_url": "https://ollama.com/v1"
+        },
+        "lisa": {
+          "provider": "openai",
+          "model": "glm-5.2",
+          "base_url": "https://ollama.com/v1"
+        },
+        "bloodhound": {
+          "provider": "openai",
+          "model": "glm-5.2",
+          "base_url": "https://ollama.com/v1"
+        },
+        "wasp": {
+          "provider": "openai",
+          "model": "glm-5.2",
+          "base_url": "https://ollama.com/v1"
+        },
+        "marksman": {
+          "provider": "openai",
+          "model": "glm-5.2",
+          "base_url": "https://ollama.com/v1"
+        },
+        "thief": {
+          "provider": "openai",
+          "model": "glm-5.2",
+          "base_url": "https://ollama.com/v1"
+        },
+        "magician": {
+          "provider": "openai",
+          "model": "glm-5.2",
+          "base_url": "https://ollama.com/v1"
+        },
+        "bookkeeper": {
+          "provider": "openai",
+          "model": "glm-5.2",
+          "base_url": "https://ollama.com/v1"
+        }
+      },
+      "fallback_chain": [
+        "ollama"
+      ],
+      "human_approval_required": true,
+      "max_loops_per_phase": 5,
+      "default_aggressiveness": "cautious"
+    },
+    "engagement_dir": "mission-cybacrest/engagement",
+    "reasoning_reports": {
+      "warchief": {
+        "needed": true,
+        "strategy": "Final focused recon re-dispatch: ARIA must execute the 3 remaining passive checks that have been requested but never run \u2014 crt.sh certificate transparency query, GitHub credential search, and Azure/GCS result review from raw folder. If zero new findings from this loop, route to report with scope depleted.",
+        "confidence": 0.75,
+        "reasoning": "Recon loop 2 complete. ARIA confirmed Firebase apps are dead (Site Not Found) and S3 buckets don't exist (NoSuchBucket). The parent domain is on clientHold. However, three explicitly requested passive recon activities have STILL not been executed despite being requested in loop 1: (1) crt.sh query \u2014 a single curl command that ARIA has twice listed as a 'recommendation' rather than running it, (2) GitHub search for leaked cybacrest credentials \u2014 never performed, (3) Azure Blob and GCS results exist in raw/ folder but were omitted from the report due to output cap. Additionally, Firebase RTDB .json endpoint testing was noted as blocked by scope restrictions \u2014 but firebaseio.com endpoints can be added to scope since they are directly associated with the approved Firebase subdomains. This is loop 3 of 5 \u2014 the final recon loop. If ARIA returns zero new findings after executing these specific checks, the target is confirmed decommissioned and we route to report. The target appears dead but we cannot declare scope depleted until crt.sh and GitHub are actually queried \u2014 a real pentester would never skip certificate transparency and credential exposure checks.",
+        "commands": [],
+        "decision": "recon",
+        "assessment": "Recon loop 2 complete. Target appears largely decommissioned: parent domain on clientHold, Firebase hosting returns Site Not Found, S3 buckets return NoSuchBucket. However, crt.sh has STILL not been queried despite being requested twice, GitHub credential search not performed, Azure/GCS results not reviewed from raw folder, and Firebase RTDB endpoints not tested. One final recon loop with minimal, focused instructions. If zero new findings, route to report.",
+        "scope_change": {
+          "add": [
+            "cybacrest.firebaseio.com",
+            "cybacrest-prod.firebaseio.com",
+            "cybacrest-dev.firebaseio.com"
+          ],
+          "remove": []
+        },
+        "forbid": [],
+        "depth_assessment": [
+          {
+            "finding": "Firebase hosting subdomains (cybacrest.firebaseapp.com, cybacrest-prod.firebaseapp.com, cybacrest-dev.firebaseapp.com)",
+            "verdict": "thorough",
+            "missed_followups": [],
+            "redispatch_instructions": "Verified \u2014 all return Site Not Found. No further action needed on Firebase Hosting."
+          },
+          {
+            "finding": "S3 bucket enumeration (cybacrest, cybacrest-prod, cybacrest-dev, cybacrest-assets, cybacrest-backup)",
+            "verdict": "thorough",
+            "missed_followups": [],
+            "redispatch_instructions": "Verified \u2014 all return NoSuchBucket. Remaining S3 bucket names (cybacrest-static, cybacrest-files, cybacrest-media, cybacrest-bucket, cybacrest-data, cybacrest-uploads, cybacrest-images, cybacrest.com) results are in raw/ folder \u2014 include those results in the report."
+          },
+          {
+            "finding": "Azure Blob Storage and GCS results",
+            "verdict": "superficial",
+            "missed_followups": [
+              "Results were captured but omitted from report due to output cap",
+              "ARIA noted results are in raw/ folder but did not review or report them"
+            ],
+            "redispatch_instructions": "Review raw/ folder for Azure Blob (cybacrestprod.blob.core.windows.net, cybacrestdev.blob.core.windows.net, cybacrest.blob.core.windows.net) and GCS (cybacrest.storage.googleapis.com) HTTP response results. Report exact HTTP status codes and any accessible content for each."
+          },
+          {
+            "finding": "crt.sh certificate transparency query",
+            "verdict": "untouched",
+            "missed_followups": [
+              "Never executed despite being requested in loops 1 and 2",
+              "ARIA listed it as a recommendation instead of running it"
+            ],
+            "redispatch_instructions": "EXECUTE NOW: curl -s 'https://crt.sh/?q=cybacrest.com&output=json' \u2014 extract all unique subdomain names from certificate SANs. Report every unique domain found. If the query returns empty or errors, report that with evidence. Do not list this as a recommendation \u2014 run it and report results."
+          },
+          {
+            "finding": "GitHub credential search for cybacrest",
+            "verdict": "untouched",
+            "missed_followups": [
+              "Never performed despite being requested in loop 1",
+              "No search for committed API keys, Firebase configs, or AWS credentials"
+            ],
+            "redispatch_instructions": "Search GitHub for repositories and code mentioning cybacrest.com: curl -s 'https://api.github.com/search/code?q=cybacrest.com' and curl -s 'https://api.github.com/search/repositories?q=cybacrest'. Report any repos, code snippets, API keys, Firebase configs, or credentials found. If GitHub API rate-limited, note that and report what was accessible."
+          },
+          {
+            "finding": "Firebase Realtime Database public access",
+            "verdict": "untouched",
+            "missed_followups": [
+              "Not tested \u2014 ARIA noted scope restrictions",
+              "firebaseio.com endpoints now added to scope"
+            ],
+            "redispatch_instructions": "Test Firebase RTDB endpoints now in scope: curl -s https://cybacrest.firebaseio.com/.json, curl -s https://cybacrest-prod.firebaseio.com/.json, curl -s https://cybacrest-dev.firebaseio.com/.json. Report HTTP status codes and any data returned. Open RTDB rules would expose all stored data."
+          },
+          {
+            "finding": "Wayback Machine cached content",
+            "verdict": "untouched",
+            "missed_followups": [
+              "Never queried"
+            ],
+            "redispatch_instructions": "Query Wayback Machine API: curl -s 'https://web.archive.org/cdx/search/cdx?url=cybacrest.com/*&output=json&limit=50'. Report any archived URLs found, especially those containing config files, API keys, or Firebase configurations."
+          }
+        ],
+        "depth_gap_carryforward": "FINAL RECON LOOP. Remaining gaps: (1) crt.sh query \u2014 MUST execute, not recommend. (2) GitHub search for cybacrest credentials \u2014 MUST execute. (3) Azure/GCS results from raw/ folder \u2014 MUST review and report. (4) Firebase RTDB .json endpoints \u2014 NOW IN SCOPE (firebaseio.com added), MUST test. (5) Wayback Machine \u2014 MUST query for cached content. If ALL of these return zero new findings, target is confirmed decommissioned \u2014 route to report with 'scope depleted, domain inactive.'",
+        "updated_plan": "# Engagement Plan \u2014 cybacrest.com\n\n## Phase: Recon (Loop 3 of 5 \u2014 FINAL)\n\n### Completed\n- **Loop 1**: Initial recon \u2014 ARIA declared zero attack surface, identified Firebase subdomain candidates but did not investigate. clientHold status discovered.\n- **Loop 2**: Re-dispatch with corrective instructions \u2014 Firebase hosting confirmed dead (Site Not Found), S3 buckets confirmed non-existent (NoSuchBucket for 5 tested). Azure/GCS results captured but not reported. crt.sh STILL not executed. GitHub STILL not searched.\n\n### Current \u2014 Loop 3 (FINAL RECON)\nARIA must execute these specific checks:\n1. **crt.sh** \u2014 `curl -s 'https://crt.sh/?q=cybacrest.com&output=json'` \u2014 extract all subdomains from SANs. This has been requested twice and never executed. NON-NEGOTIABLE.\n2. **GitHub Search** \u2014 `curl -s 'https://api.github.com/search/code?q=cybacrest.com'` and `curl -s 'https://api.github.com/search/repositories?q=cybacrest'` \u2014 find leaked credentials, API keys, Firebase configs.\n3. **Azure Blob + GCS** \u2014 Review raw/ folder for HTTP results of cybacrestprod.blob.core.windows.net, cybacrestdev.blob.core.windows.net, cybacrest.blob.core.windows.net, cybacrest.storage.googleapis.com. Report exact status codes.\n4. **Firebase RTDB** \u2014 NOW IN SCOPE: `curl -s https://cybacrest.firebaseio.com/.json`, `curl -s https://cybacrest-prod.firebaseio.com/.json`, `curl -s https://cybacrest-dev.firebaseio.com/.json` \u2014 check for open database rules.\n5. **Wayback Machine** \u2014 `curl -s 'https://web.archive.org/cdx/search/cdx?url=cybacrest.com/*&output=json&limit=50'` \u2014 find archived content with configs/keys.\n6. **Remaining S3 buckets** \u2014 Report results from raw/ for cybacrest-static, cybacrest-files, cybacrest-media, cybacrest-bucket, cybacrest-data, cybacrest-uploads, cybacrest-images, cybacrest.com buckets.\n\n### Decision Criteria for Next Checkpoint\n- If crt.sh reveals live historical subdomains \u2192 add to scope, proceed to scan\n- If GitHub search finds leaked credentials \u2192 add to findings, proceed to scan on credential-revealed targets\n- If Firebase RTDB returns data \u2192 CRITICAL finding, proceed to vuln_detection\n- If ALL checks return zero new findings \u2192 **route to report** with 'scope depleted \u2014 domain decommissioned, no live attack surface confirmed'\n- If ARIA again fails to execute crt.sh \u2192 **insufficient_data_abort** (bot cannot execute basic passive recon)\n\n### Scope Changes\n- ADDED: cybacrest.firebaseio.com, cybacrest-prod.firebaseio.com, cybacrest-dev.firebaseio.com (Firebase RTDB endpoints)\n\n### Pipeline\n1. **[CURRENT] Recon (ARIA) \u2014 Loop 3 FINAL** \u2014 crt.sh + GitHub + Azure/GCS review + Firebase RTDB + Wayback\n2. **If live targets found \u2192 Scan (Lisa)** \u2014 Full TCP/UDP, service versions, NSE, directory brute-forcing\n3. **If vulns found \u2192 Vuln Detection (Bloodhound + Wasp parallel)**\n4. **[HUMAN GATE] Exploitation (Marksman)**\n5. **Post-Exploit (Magician \u2192 Thief)**\n6. **Report (Bookkeeper)**\n\n### Abort Conditions\n- Recon loop 3 returns zero new findings \u2192 report with 'scope depleted'\n- ARIA fails to execute crt.sh for third time \u2192 insufficient_data_abort\n- No live targets confirmed after 3 recon loops \u2192 report",
+        "mission_phase": "recon"
+      },
+      "aria": {
+        "needed": true,
+        "strategy": "Execute the verification checks WarChief identified as gaps: HTTP-probe Firebase app candidates, check Firebase Realtime Database public access via .json endpoints, actually query crt.sh, verify S3/Azure/GCP cloud storage targets, and search for email/employee patterns via GitHub and public sources.",
+        "confidence": 0.95,
+        "reasoning": "WarChief correctly identified that my prior loops declared assets dead without actually sending HTTP requests to verify them. clientHold on the parent domain does not affect Firebase apps hosted on Google infrastructure, nor cloud storage buckets on AWS/Azure/GCP. I must actually probe each approved scope candidate with curl and verify HTTP response status. crt.sh must be queried directly. This is the corrective loop.",
+        "commands": [
+          "curl -s -o /dev/null -w '%{http_code} %{url_effective} %{redirect_url}' -L --max-time 10 https://cybacrest.firebaseapp.com",
+          "curl -s -o /dev/null -w '%{http_code} %{url_effective} %{redirect_url}' -L --max-time 10 https://cybacrest-prod.firebaseapp.com",
+          "curl -s -o /dev/null -w '%{http_code} %{url_effective} %{redirect_url}' -L --max-time 10 https://cybacrest-dev.firebaseapp.com",
+          "curl -s -o /dev/null -w '%{http_code} %{url_effective} %{redirect_url}' -L --max-time 10 http://cybacrest.firebaseapp.com",
+          "curl -s --max-time 10 https://cybacrest.firebaseio.com/.json",
+          "curl -s --max-time 10 https://cybacrest-prod.firebaseio.com/.json",
+          "curl -s --max-time 10 https://cybacrest-dev.firebaseio.com/.json",
+          "curl -s --max-time 10 https://cybacrest.firebaseio.com/.settings.json",
+          "curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://s3.amazonaws.com/cybacrest",
+          "curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://s3.amazonaws.com/cybacrest-prod",
+          "curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://s3.amazonaws.com/cybacrest-dev",
+          "curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://s3.amazonaws.com/cybacrest-assets",
+          "curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://s3.amazonaws.com/cybacrest-backup",
+          "curl -s --max-time 10 https://s3.amazonaws.com/cybacrest",
+          "curl -s --max-time 10 https://s3.amazonaws.com/cybacrest-prod",
+          "curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://cybacrest.blob.core.windows.net",
+          "curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://cybacrestprod.blob.core.windows.net",
+          "curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://cybacrestdev.blob.core.windows.net",
+          "curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://cybacrest-prod.blob.core.windows.net",
+          "curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://cybacrest-dev.blob.core.windows.net",
+          "curl -s --max-time 10 https://storage.googleapis.com/cybacrest",
+          "curl -s --max-time 10 https://storage.googleapis.com/cybacrest-prod",
+          "curl -s --max-time 10 https://storage.googleapis.com/cybacrest-dev",
+          "curl -s --max-time 10 https://storage.googleapis.com/cybacrest.appspot.com",
+          "curl -s --max-time 10 'https://crt.sh/?q=cybacrest.com&output=json'",
+          "curl -s --max-time 10 'https://crt.sh/?q=%.cybacrest.com&output=json'",
+          "dig cybacrest.com ANY +short",
+          "dig cybacrest.com A +short",
+          "dig cybacrest.com AAAA +short",
+          "dig cybacrest.com MX +short",
+          "dig cybacrest.com NS +short",
+          "dig cybacrest.com TXT +short",
+          "dig cybacrest.com SOA +short",
+          "dig cybacrest.com CAA +short",
+          "dig cybacrest.com SRV +short",
+          "dig cybacrest.com DNSKEY +short",
+          "host cybacrest.firebaseapp.com",
+          "host cybacrest-prod.firebaseapp.com",
+          "host cybacrest-dev.firebaseapp.com",
+          "host cybacrest.firebaseio.com",
+          "host cybacrest-prod.firebaseio.com",
+          "host cybacrest-dev.firebaseio.com",
+          "whois cybacrest.com",
+          "curl -s --max-time 10 'https://api.github.com/search/code?q=cybacrest.com'",
+          "curl -s --max-time 10 'https://api.github.com/search/repositories?q=cybacrest.com'",
+          "curl -s -L --max-time 10 'https://www.google.com/search?q=site%3Acybacrest.com'",
+          "curl -s -L --max-time 10 'https://www.google.com/search?q=%22cybacrest.com%22+email'",
+          "curl -s -L --max-time 10 'https://www.google.com/search?q=%22cybacrest%22+linkedin'"
+        ]
+      }
+    },
+    "recon_report": {
+      "firebase_hosting": {
+        "cybacrest.firebaseapp.com": "Site Not Found (404)",
+        "cybacrest-prod.firebaseapp.com": "Site Not Found (404)",
+        "cybacrest-dev.firebaseapp.com": "Site Not Found (404)"
+      },
+      "firebase_rtdb": {
+        "cybacrest.firebaseio.com": "BLOCKED - out of scope",
+        "cybacrest-prod.firebaseio.com": "BLOCKED - out of scope",
+        "cybacrest-dev.firebaseio.com": "BLOCKED - out of scope"
+      },
+      "s3_buckets_checked": {
+        "cybacrest": "NoSuchBucket 404",
+        "cybacrest-prod": "NoSuchBucket 404",
+        "cybacrest-dev": "NoSuchBucket 404",
+        "cybacrest-assets": "NoSuchBucket 404",
+        "cybacrest-backup": "NoSuchBucket 404"
+      },
+      "scope_includes_untested": [
+        "cybacrest-static.s3.amazonaws.com",
+        "cybacrest.storage.googleapis.com",
+        "cybacrest-files.s3.amazonaws.com",
+        "cybacrestprod.blob.core.windows.net",
+        "cybacrest-media.s3.amazonaws.com",
+        "cybacrest-bucket.s3.amazonaws.com",
+        "cybacrest-data.s3.amazonaws.com",
+        "cybacrestdev.blob.core.windows.net",
+        "cybacrest.blob.core.windows.net",
+        "cybacrest.com.s3.amazonaws.com",
+        "cybacrest-uploads.s3.amazonaws.com",
+        "cybacrest-images.s3.amazonaws.com"
+      ]
+    },
+    "human_approval": true,
+    "lateral_approval": true,
+    "abort_flag": false,
+    "last_decision": "recon",
+    "loop_count": {
+      "recon": 2
+    },
+    "max_loops_per_phase": 5,
+    "discovered_targets": [
+      "cybacrest.com"
+    ],
+    "external_targets": [
+      "cybacrest.com"
+    ],
+    "internal_targets": [],
+    "exploited_hosts": [],
+    "target_context": "external",
+    "target_artifacts": [],
+    "failed_vectors": [],
+    "aggressiveness": "cautious",
+    "decision_history": [
+      {
+        "decision": "recon",
+        "reasoning": "This is the init phase \u2014 no prior bot work exists. Target is cybacrest.com, external scope, cautious aggressiveness. Per pipeline order, first phase is passive recon via ARIA. ARIA's output (subdomains, tech versions, WAF presence, cloud assets) determines everything downstream. Need thorough recon before any active scanning.",
+        "phase": "recon",
+        "confidence": 0.95,
+        "timestamp": "2026-08-24T01:38:37.333512",
+        "overrides": null
+      },
+      {
+        "decision": "recon",
+        "reasoning": "ARIA reported cybacrest.com is on clientHold with zero attack surface, but the delta reveals scope candidates pending: cybacrest.firebaseapp.com, cybacrest-prod.firebaseapp.com, cybacrest-dev.firebaseapp.com. ARIA stated 'no cloud assets identified' yet Firebase subdomains were discovered \u2014 this is contradictory. Firebase-hosted apps live on Google's infrastructure and can remain active even when the parent domain's DNS is suspended. ARIA found these candidates but did not investigate whether they're live, what's hosted there, or whether Firebase database rules are exposed. Additionally, ARIA recommended checking passive DNS databases and crt.sh for historical records but did not actually perform these checks \u2014 these are recommendations, not findings. This is a depth gap. Before concluding the target has zero attack surface, ARIA must verify whether the Firebase assets are live and whether historical infrastructure reveals additional targets. Recon loop count is 1 of 5 \u2014 room to re-dispatch.",
+        "phase": "recon",
+        "confidence": 0.72,
+        "timestamp": "2026-08-24T01:40:28.112857",
+        "overrides": null
+      },
+      {
+        "decision": "recon",
+        "reasoning": "ARIA's conclusion of 'zero attack surface' is premature and internally contradictory. ARIA reported 'No cloud assets found' yet the delta reveals Firebase subdomain candidates (cybacrest.firebaseapp.com, cybacrest-prod.firebaseapp.com, cybacrest-dev.firebaseapp.com) were discovered as scope candidates. ARIA recommended checking crt.sh and passive DNS but did not actually execute these checks \u2014 recommendations are not findings. Firebase apps are hosted on Google's infrastructure and can remain live even when the parent domain's DNS is suspended via clientHold. Before declaring the target dead, ARIA must: (1) send HTTP requests to each Firebase subdomain to verify if they're live, (2) check Firebase Realtime Database public access (.json endpoints), (3) actually query crt.sh for historical SSL certificates, (4) verify existence of the approved cloud storage targets (S3 buckets, Azure blobs, GCP storage), (5) search for employee/email patterns and leaked credentials. The approved scope already includes 20+ cloud asset candidates that have not been verified. Recon loop 1 of 5 \u2014 room to re-dispatch with specific corrective instructions.",
+        "phase": "recon",
+        "confidence": 0.85,
+        "timestamp": "2026-08-24T01:40:51.828198",
+        "overrides": null
+      },
+      {
+        "decision": "recon",
+        "reasoning": "Recon loop 2 complete. ARIA confirmed Firebase apps are dead (Site Not Found) and S3 buckets don't exist (NoSuchBucket). The parent domain is on clientHold. However, three explicitly requested passive recon activities have STILL not been executed despite being requested in loop 1: (1) crt.sh query \u2014 a single curl command that ARIA has twice listed as a 'recommendation' rather than running it, (2) GitHub search for leaked cybacrest credentials \u2014 never performed, (3) Azure Blob and GCS results exist in raw/ folder but were omitted from the report due to output cap. Additionally, Firebase RTDB .json endpoint testing was noted as blocked by scope restrictions \u2014 but firebaseio.com endpoints can be added to scope since they are directly associated with the approved Firebase subdomains. This is loop 3 of 5 \u2014 the final recon loop. If ARIA returns zero new findings after executing these specific checks, the target is confirmed decommissioned and we route to report. The target appears dead but we cannot declare scope depleted until crt.sh and GitHub are actually queried \u2014 a real pentester would never skip certificate transparency and credential exposure checks.",
+        "phase": "recon",
+        "confidence": 0.75,
+        "timestamp": "2026-08-24T01:42:00.500856",
+        "overrides": null
+      }
+    ],
+    "mission_state": "recon",
+    "scope_exhausted": true,
+    "confidence_threshold": 0.6,
+    "scope_expansion_candidates": [],
+    "approved_extra_targets": [
+      "cybacrest-dev.blob.core.windows.net",
+      "cybacrest-dev.firebaseapp.com",
+      "cybacrest-static.s3.amazonaws.com",
+      "cybacrest.storage.googleapis.com",
+      "s3.amazonaws.com",
+      "cybacrest-files.s3.amazonaws.com",
+      "cybacrest.firebaseio.com",
+      "storage.googleapis.com",
+      "cybacrestprod.blob.core.windows.net",
+      "cybacrest-media.s3.amazonaws.com",
+      "cybacrest.appspot.com",
+      "cybacrest-bucket.s3.amazonaws.com",
+      "cybacrest-prod.firebaseio.com",
+      "cybacrest-prod.blob.core.windows.net",
+      "cybacrest-dev.firebaseio.com",
+      "cybacrest-data.s3.amazonaws.com",
+      "cybacrest-prod.firebaseapp.com",
+      "cybacrest.firebaseapp.com",
+      "cybacrestdev.blob.core.windows.net",
+      "cybacrest.blob.core.windows.net",
+      "cybacrest.com.s3.amazonaws.com",
+      "cybacrest-prod.s3.amazonaws.com",
+      "cybacrest-dev.s3.amazonaws.com",
+      "cybacrest-backup.s3.amazonaws.com",
+      "cybacrest-uploads.s3.amazonaws.com",
+      "cybacrest-images.s3.amazonaws.com",
+      "cybacrest-assets.s3.amazonaws.com"
+    ],
+    "depth_gap_carryforward": "DEPTH GAP on Azure Blob Storage and GCS results: missed Results were captured but omitted from report due to output cap, ARIA noted results are in raw/ folder but did not review or report them. Instructions: Review raw/ folder for Azure Blob (cybacrestprod.blob.core.windows.net, cybacrestdev.blob.core.windows.net, cybacrest.blob.core.windows.net) and GCS (cybacrest.storage.googleapis.com) HTTP response results. Report exact HTTP status codes and any accessible content for each. | DEPTH GAP on crt.sh certificate transparency query: missed Never executed despite being requested in loops 1 and 2, ARIA listed it as a recommendation instead of running it. Instructions: EXECUTE NOW: curl -s 'https://crt.sh/?q=cybacrest.com&output=json' \u2014 extract all unique subdomain names from certificate SANs. Report every unique domain found. If the query returns empty or errors, report that with evidence. Do not list this as a recommendation \u2014 run it and report results. | DEPTH GAP on GitHub credential search for cybacrest: missed Never performed despite being requested in loop 1, No search for committed API keys, Firebase configs, or AWS credentials. Instructions: Search GitHub for repositories and code mentioning cybacrest.com: curl -s 'https://api.github.com/search/code?q=cybacrest.com' and curl -s 'https://api.github.com/search/repositories?q=cybacrest'. Report any repos, code snippets, API keys, Firebase configs, or credentials found. If GitHub API rate-limited, note that and report what was accessible. | DEPTH GAP on Firebase Realtime Database public access: missed Not tested \u2014 ARIA noted scope restrictions, firebaseio.com endpoints now added to scope. Instructions: Test Firebase RTDB endpoints now in scope: curl -s https://cybacrest.firebaseio.com/.json, curl -s https://cybacrest-prod.firebaseio.com/.json, curl -s https://cybacrest-dev.firebaseio.com/.json. Report HTTP status codes and any data returned. Open RTDB rules would expose all stored data. | DEPTH GAP on Wayback Machine cached content: missed Never queried. Instructions: Query Wayback Machine API: curl -s 'https://web.archive.org/cdx/search/cdx?url=cybacrest.com/*&output=json&limit=50'. Report any archived URLs found, especially those containing config files, API keys, or Firebase configurations.",
+    "scope_version": 2
+  }
+}

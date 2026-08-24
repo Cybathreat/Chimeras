@@ -51,7 +51,7 @@ class OpenAIProvider(LLMProvider):
         return self._async_client
 
     async def stream(self, prompt: str, system: Optional[str] = None,
-                     max_tokens: int = 4096, **kwargs) -> AsyncIterator[str]:
+                     max_tokens: int = 32768, **kwargs) -> AsyncIterator[str]:
         """Stream GPT response token by token."""
         client = self._get_async_client()
 
@@ -72,7 +72,7 @@ class OpenAIProvider(LLMProvider):
                 yield chunk.choices[0].delta.content
 
     def generate(self, prompt: str, system: Optional[str] = None,
-                 max_tokens: int = 4096, **kwargs) -> str:
+                 max_tokens: int = 32768, **kwargs) -> str:
         """Generate complete GPT response (sync)."""
         client = self._get_sync_client()
 
@@ -86,9 +86,12 @@ class OpenAIProvider(LLMProvider):
             messages=messages,
             max_tokens=max_tokens
         )
-        content = response.choices[0].message.content
+        content = response.choices[0].message.content or ""
         # Check if response was truncated
-        if hasattr(response, 'usage') and response.usage:
-            if response.usage.completion_tokens >= max_tokens - 10:
+        finish_reason = response.choices[0].finish_reason if hasattr(response.choices[0], 'finish_reason') else None
+        if finish_reason == "length":
+            content += "\n\n[NOTE: Response truncated due to token limit — increase max_tokens or reduce input]"
+        elif hasattr(response, 'usage') and response.usage:
+            if response.usage.completion_tokens and response.usage.completion_tokens >= max_tokens - 10:
                 content += "\n\n[NOTE: Response may have been truncated due to token limit]"
         return content

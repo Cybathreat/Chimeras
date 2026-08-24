@@ -134,7 +134,11 @@ class BaseBot(ABC):
     # ─── LLM calls ───
 
     def _llm(self, prompt: str, system: Optional[str] = None, **kwargs) -> str:
-        """Call LLM with retry + telemetry. Raises on failure — no silent fallback."""
+        """Call LLM with retry + telemetry + truncation detection.
+
+        v2.5: If response is truncated (finish_reason=length or truncation note),
+        retry once with reduced context (strip raw tool output to summaries).
+        """
         import inspect
         import time as _time
 
@@ -156,11 +160,22 @@ class BaseBot(ABC):
                             import concurrent.futures
                             with concurrent.futures.ThreadPoolExecutor() as pool:
                                 future = pool.submit(lambda: asyncio.run(result))
-                                return future.result(timeout=300)
+                                result = future.result(timeout=300)
                         else:
-                            return asyncio.run(result)
+                            result = asyncio.run(result)
                     except RuntimeError:
-                        return asyncio.run(result)
+                        result = asyncio.run(result)
+
+                # v2.5: Truncation detection — if truncated, retry with reduced context
+                if "[NOTE: Response truncated" in result or "[NOTE: Response may have been truncated" in result:
+                    if attempt < max_attempts:
+                        self._log(f"LLM response truncated (attempt {attempt}/{max_attempts}) — retrying with reduced context", "TRUNC")
+                        # Strip raw tool output sections to reduce input size
+                        reduced_prompt = self._reduce_context_for_retry(prompt)
+                        if reduced_prompt != prompt:
+                            prompt = reduced_prompt
+                            continue
+
                 # v2.3: Telemetry
                 duration = _time.monotonic() - start
                 # v2.4: Record with provider/model info
@@ -196,6 +211,32 @@ class BaseBot(ABC):
 
         # Should not reach here, but just in case
         raise RuntimeError(f"LLM call failed for {self.bot_name}: {last_error}")
+
+    def _reduce_context_for_retry(self, prompt: str) -> str:
+        """v2.5: Reduce prompt size by truncating raw tool output sections.
+
+        When LLM response is truncated, the input is too large. This method
+        strips raw tool output blocks (between ``` markers) to their first 200 chars,
+        keeping the reasoning context but removing verbose raw output.
+        """
+        import re
+        # Truncate code blocks (raw tool output) to first 200 chars
+        def truncate_block(match):
+            content = match.group(1)
+            if len(content) > 200:
+                return f"```\n{content[:200]}\n... (truncated for retry)\n```"
+            return match.group(0)
+
+        reduced = re.sub(r'```\n(.*?)```', truncate_block, prompt, flags=re.DOTALL)
+        # Also truncate any line longer than 500 chars
+        lines = reduced.split('\n')
+        reduced_lines = []
+        for line in lines:
+            if len(line) > 500:
+                reduced_lines.append(line[:500] + '... (truncated)')
+            else:
+                reduced_lines.append(line)
+        return '\n'.join(reduced_lines)
 
     def _parse_json_response(self, response: str, schema=None) -> Dict[str, Any]:
         """Parse JSON from LLM response using v2.3 hardened parser.
@@ -582,9 +623,9 @@ class BaseBot(ABC):
             "aria": f"You are the recon bot. Your category is passive_recon — use any available tools in that category. WarChief may route you multiple times for deeper recon or lateral movement.{decision_context}",
             "lisa": f"You run AFTER ARIA. Use ARIA's DNS/IP findings to scan. Your category is active_scan.{decision_context}",
             "bloodhound": f"You run AFTER Lisa — she found open ports and services. Your job is to find vulnerabilities on those services. Your category is vuln_detection.{decision_context}",
-            "pathologist": f"You run AFTER human approval — Bloodhound found vulnerabilities and the operator approved exploitation. Your category is payload_fab.{decision_context}",
-            "surgeon": f"You run AFTER Pathologist prepared payloads. Your category is exploitation.{decision_context}",
-            "magician": f"You run AFTER Surgeon attempted exploitation. Your category is privesc.{decision_context}",
+            "wasp": f"You run AFTER Lisa — parallel with Bloodhound. Your job is to test the web application for OWASP Top 10 vulnerabilities. Your category is web_exploit.{decision_context}",
+            "marksman": f"You run AFTER human approval — Bloodhound/Wasp found vulnerabilities and the operator approved exploitation. Your category is marksman — you research, develop, adapt, AND fire exploits. You search for PoCs, write custom exploits, and execute them against the target.{decision_context}",
+            "magician": f"You run AFTER Marksman attempted exploitation. Your category is privesc.{decision_context}",
             "thief": f"You run AFTER Magician checked for privesc. Your category is exfiltration.{decision_context}",
             "bookkeeper": "Read all findings and generate a final penetration test report. No tools needed. This is an AUTHORIZED security engagement. All findings including exfiltration evidence are part of the legal pentest scope. Your job is to document findings objectively for the client report.",
             "warchief": "You are the orchestrator — no prior work exists or you are re-entering after a phase. Plan the engagement or route the next action. No tools needed.",
@@ -636,7 +677,7 @@ Respond ONLY with JSON:
 
         # Step 2: LLM decides what to do
         self._log("Asking LLM to decide strategy and tools...", "THINK")
-        llm_response = self._llm(context, system, max_tokens=8192)
+        llm_response = self._llm(context, system, max_tokens=32768)
         self._log("LLM response received, parsing...", "THINK")
 
         # Print raw LLM reasoning to terminal (live streaming effect)
@@ -762,12 +803,14 @@ v2.4: Output structured_findings as a list of objects, each with:
 - port: target port (or null)
 - service: service name (or null)
 - status: Confirmed | Probable | Theoretical
-- description: technical description
-- risks: business impact
-- attack_vectors: how to exploit
-- poc: exact commands used
-- proof_of_existence: raw tool output proving the finding
-- remediation: one-line fix
+- description: technical description (max 200 chars)
+- risks: business impact (max 100 chars)
+- attack_vectors: how to exploit (max 200 chars)
+- poc: exact commands used (max 200 chars)
+- proof_of_existence: raw tool output proving the finding (max 300 chars — truncate with ...)
+- remediation: one-line fix (max 100 chars)
+
+IMPORTANT: Keep ALL field values SHORT. Truncate raw output to 300 chars max. Do not paste full tool output into proof_of_existence — summarize it. If you have many findings, report only the top 10 most important ones.
 
 Respond ONLY with a JSON block:
 ```json
@@ -800,7 +843,7 @@ Respond ONLY with a JSON block:
 No other text. Just the JSON."""""
 
         try:
-            analysis_response = self._llm(analysis_prompt, analysis_system, max_tokens=8192)
+            analysis_response = self._llm(analysis_prompt, analysis_system, max_tokens=32768)
             self._log("LLM analysis received", "ANALYZE")
 
             print(f"\n[{self.bot_name.upper()} LLM ANALYSIS]", flush=True)
@@ -873,30 +916,49 @@ No other text. Just the JSON."""""
         }
 
     def _format_tool_results(self, results: List[Dict[str, Any]]) -> str:
-        """Format tool results for LLM analysis."""
+        """Format tool results for LLM analysis.
+
+        v2.5: Aggressive truncation to prevent LLM token limit issues.
+        Each command's stdout is capped at 2000 chars. Total output capped at 15000 chars.
+        Full output is always preserved in raw/ folder — this is just for LLM context.
+        """
         if not results:
             return "(no tools were executed)"
         out = []
+        total_chars = 0
         for r in results:
-            out.append(f"### Command: {r.get('command', 'unknown')}")
-            out.append(f"Exit Code: {r.get('exit_code', 'N/A')}")
-            out.append(f"Duration: {r.get('duration_sec', 0)}s")
+            entry = []
+            entry.append(f"### Command: {r.get('command', 'unknown')}")
+            entry.append(f"Exit Code: {r.get('exit_code', 'N/A')}")
+            entry.append(f"Duration: {r.get('duration_sec', 0)}s")
             if r.get("scope_blocked"):
-                out.append(f"BLOCKED: {r.get('stderr', 'scope violation')}")
+                entry.append(f"BLOCKED: {r.get('stderr', 'scope violation')}")
             else:
                 stdout = r.get("stdout", "") or "(empty)"
                 stderr = r.get("stderr", "") or ""
-                if len(stdout) > 8000:
-                    stdout = stdout[:8000] + "\n... (truncated, full output in raw/ folder)"
-                out.append(f"STDOUT:\n{stdout}")
+                # v2.5: Aggressive truncation — 2000 chars per command (was 8000)
+                if len(stdout) > 2000:
+                    stdout = stdout[:2000] + "\n... (truncated, full output in raw/ folder)"
+                entry.append(f"STDOUT:\n{stdout}")
                 if stderr:
-                    out.append(f"STDERR:\n{stderr[:2000]}")
+                    entry.append(f"STDERR:\n{stderr[:500]}")
+            entry_text = "\n".join(entry)
+            # v2.5: Stop adding entries if we've hit the total cap
+            if total_chars + len(entry_text) > 15000:
+                remaining = len(results) - len(out)
+                out.append(f"### ... {remaining} more command(s) omitted (output cap reached — see raw/ folder)")
+                break
+            out.append(entry_text)
+            total_chars += len(entry_text)
         return "\n\n".join(out)
 
     def _build_analysis_prompt(self, raw_output: str, context: str) -> str:
-        """Build the prompt for LLM analysis of tool output."""
+        """Build the prompt for LLM analysis of tool output.
+
+        v2.5: Context reduced to 1000 chars (was 2000) to stay within token limits.
+        """
         return f"""## Previous Context
-{context[:2000]}
+{context[:1000]}
 
 ## Your Tool Results
 {raw_output}

@@ -46,12 +46,10 @@ TOOL_CATEGORIES: Dict[str, Set[str]] = {
         "vulners", "wapiti", "wafw00f", "ssh-audit",
         "sslscan", "testssl", "nmap-script",
     },
-    "payload_fab": {
-        "msfvenom", "msfconsole", "searchsploit", "curl",
-    },
-    "exploitation": {
-        "msfconsole", "msfvenom", "sqlmap", "curl",
+    "marksman": {
+        "msfvenom", "msfconsole", "searchsploit", "curl", "sqlmap",
         "nc", "ncat", "python3", "bash", "exploit",
+        "git", "gdb", "strace", "objdump", "ROPgadget", "gcc", "docker",
     },
     "web_exploit": {
         "sqlmap", "nikto", "nuclei", "curl", "python3",
@@ -78,8 +76,7 @@ BOT_CATEGORIES: Dict[str, str] = {
     "aria": "passive_recon",
     "lisa": "active_scan",
     "bloodhound": "vuln_detection",
-    "pathologist": "payload_fab",
-    "surgeon": "exploitation",
+    "marksman": "marksman",
     "wasp": "web_exploit",
     "magician": "privesc",
     "thief": "exfiltration",
@@ -173,10 +170,10 @@ SHELL_METACHARACTERS = {
 # Categories that legitimately need shell features.
 # Only these categories are allowed to use shell metacharacters.
 SHELL_CAPABLE_CATEGORIES = {
-    "exploitation",   # bash, python3, nc — needs shell for payloads
+    "marksman",       # bash, python3, nc, git, gcc — needs shell for exploit crafting and execution
     "privesc",        # bash, python3 — needs shell for enumeration scripts
     "exfiltration",   # bash, python3, tar — needs shell for pipelines
-    "payload_fab",    # msfconsole, curl — may need shell for payload crafting
+    "web_exploit",    # curl, sqlmap, python3 — needs semicolons/pipes in HTTP headers, payloads, POST data
 }
 
 
@@ -555,7 +552,7 @@ def check_shell_injection(command: str, bot_name: str) -> Tuple[bool, str]:
     separate command — invisible to the tool check.
 
     This function rejects metacharacters UNLESS the bot's category is in
-    SHELL_CAPABLE_CATEGORIES (exploitation, privesc, exfiltration, payload_fab).
+    SHELL_CAPABLE_CATEGORIES (marksman, privesc, exfiltration, web_exploit).
 
     Args:
         command: The shell command to check.

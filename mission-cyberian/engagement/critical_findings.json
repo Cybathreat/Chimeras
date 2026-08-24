@@ -1,0 +1,20 @@
+{"timestamp": "2026-08-24T01:41:18.881240", "bot": "warchief", "cvss": 7.5, "target": "cyberian-defenses.com", "tool": "", "finding": "Direct server exposure \u2014 no CDN/WAF protection"}
+{"timestamp": "2026-08-24T01:42:57.691915", "bot": "warchief", "cvss": 7.5, "target": "cyberian-defenses.com", "tool": "", "finding": "Direct server exposure \u2014 no CDN/WAF protection"}
+{"timestamp": "2026-08-24T01:43:30.293669", "bot": "warchief", "cvss": 7.5, "target": "76.13.46.223", "tool": "", "finding": "Direct server exposure \u2014 no CDN/WAF protection"}
+{"timestamp": "2026-08-24T01:45:33.996856", "bot": "warchief", "cvss": 7.5, "target": "76.13.46.223", "tool": "", "finding": "Direct server exposure \u2014 no CDN/WAF protection"}
+{"timestamp": "2026-08-24T01:47:02.248668", "bot": "warchief", "cvss": 7.5, "target": "76.13.46.223", "tool": "", "finding": "Direct Server Exposure \u2014 No CDN/WAF"}
+{"timestamp": "2026-08-24T01:48:31.186227", "bot": "warchief", "cvss": 7.5, "target": "76.13.46.223", "tool": "", "finding": "Direct server exposure \u2014 no CDN/WAF protection"}
+{"timestamp": "2026-08-24T01:48:31.186273", "bot": "warchief", "cvss": 7.1, "target": "cyberian-defenses.com", "tool": "", "finding": "No DNSSEC \u2014 DNS cache poisoning risk"}
+{"timestamp": "2026-08-24T01:51:02.767992", "bot": "warchief", "cvss": 7.5, "target": "76.13.46.223", "tool": "", "finding": "Direct server exposure \u2014 no CDN/WAF protection"}
+{"timestamp": "2026-08-24T01:51:02.768032", "bot": "warchief", "cvss": 7.1, "target": "cyberian-defenses.com", "tool": "", "finding": "No DNSSEC \u2014 DNS cache poisoning risk"}
+{"timestamp": "2026-08-24T01:56:17.527791", "bot": "warchief", "cvss": 7.5, "target": "76.13.46.223", "tool": "", "finding": "No WAF/CDN \u2014 Direct Server Exposure"}
+{"timestamp": "2026-08-24T01:56:17.527858", "bot": "warchief", "cvss": 7.1, "target": "cyberian-defenses.com", "tool": "", "finding": "No DNSSEC \u2014 DNS Cache Poisoning Risk"}
+{"timestamp": "2026-08-24T01:58:38.491027", "bot": "warchief", "cvss": 7.5, "target": "cyberian-defenses.com", "tool": "", "finding": "Direct Server Exposure \u2014 No CDN/WAF Protection"}
+{"timestamp": "2026-08-24T01:58:38.491109", "bot": "warchief", "cvss": 7.1, "target": "cyberian-defenses.com", "tool": "", "finding": "No DNSSEC \u2014 DNS Cache Poisoning Risk"}
+{"timestamp": "2026-08-24T01:59:08.965848", "bot": "thief", "cvss": 7.5, "target": "cyberian-defenses.com", "tool": "", "finding": ".env file present on server \u2014 blocked by nginx but may contain secrets"}
+{"timestamp": "2026-08-24T01:59:08.965891", "bot": "thief", "cvss": 7.5, "target": "cyberian-defenses.com", "tool": "", "finding": ".git/config present on server \u2014 blocked by nginx but repo may be exposed"}
+{"timestamp": "2026-08-24T02:00:04.504781", "bot": "warchief", "cvss": 7.5, "target": "76.13.46.223", "tool": "", "finding": "No WAF/CDN \u2014 Direct Server Exposure"}
+{"timestamp": "2026-08-24T02:00:04.504850", "bot": "warchief", "cvss": 7.1, "target": "cyberian-defenses.com", "tool": "", "finding": "No DNSSEC \u2014 DNS Cache Poisoning Risk"}
+{"timestamp": "2026-08-24T02:00:04.504920", "bot": "warchief", "cvss": 7.5, "target": "cyberian-defenses.com", "tool": "", "finding": ".env File Present \u2014 Blocked by Nginx"}
+{"timestamp": "2026-08-24T02:00:04.504986", "bot": "warchief", "cvss": 7.5, "target": "cyberian-defenses.com", "tool": "", "finding": ".git/config Present \u2014 Blocked by Nginx"}
+{"timestamp": "2026-08-24T02:00:04.505050", "bot": "warchief", "cvss": 8.1, "target": "76.13.46.223", "tool": "", "finding": "OpenSSH 9.6p1 \u2014 CVE-2024-6387 (regreSSHion) Candidate"}

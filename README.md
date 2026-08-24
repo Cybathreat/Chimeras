@@ -208,8 +208,7 @@ Create a `swarm-config.json` in your mission directory. v1 configs are auto-migr
     "lisa":        {"provider": "openai", "model": "gpt-4o"},
     "bloodhound":  {"provider": "openai", "model": "gpt-4o"},
     "wasp":        {"provider": "openai", "model": "gpt-4o"},
-    "surgeon":     {"provider": "openai", "model": "gpt-4o"},
-    "pathologist": {"provider": "openai", "model": "gpt-4o"},
+    "marksman":    {"provider": "openai", "model": "gpt-4o"},
     "magician":    {"provider": "openai", "model": "gpt-4o"},
     "thief":       {"provider": "openai", "model": "gpt-4o"},
     "bookkeeper":  {"provider": "openai", "model": "gpt-4o"}

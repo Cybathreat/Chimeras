@@ -26,17 +26,18 @@ No unhandled exceptions — the graph degrades gracefully.
 """
 
 import asyncio
+from pathlib import Path
 from typing import Dict, Any, Optional
 from langgraph.graph import StateGraph, END
+from core.checkpoint import save_checkpoint
 
 from core.state import SwarmState
 from warchief.agent import WarChief
 from aria.agent import ARIA
 from lisa.agent import Lisa
 from bloodhound.agent import Bloodhound
-from surgeon.agent import Surgeon
+from marksman.agent import Marksman
 from wasp.agent import Wasp
-from pathologist.agent import Pathologist
 from thief.agent import Thief
 from magician.agent import Magician
 from bookkeeper.agent import Bookkeeper
@@ -47,13 +48,12 @@ from bookkeeper.agent import Bookkeeper
 # Bot dependency map: bots that MUST run sequentially (A depends on B's output)
 # Everything not in this map can parallelize if WarChief approves.
 BOT_DEPENDENCIES = {
-    "pathologist": "surgeon",      # Pathologist builds payloads → Surgeon uses them
-    "surgeon": "magician",          # Surgeon exploits → Magician checks privesc on the shell
+    "marksman": "magician",          # Marksman researches+fires → Magician checks privesc on the shell
     "magician": "thief",            # Magician escalates → Thief exfiltrates
 }
 
 # Bots that can NEVER parallelize (they are inherently sequential gates)
-SEQUENTIAL_ONLY = {"pathologist", "surgeon", "magician", "thief", "bookkeeper", "warchief"}
+SEQUENTIAL_ONLY = {"marksman", "magician", "thief", "bookkeeper", "warchief"}
 
 # Bots that can run in parallel (recon, scan, detection)
 PARALLEL_CAPABLE = {"aria", "lisa", "bloodhound", "wasp"}
@@ -224,13 +224,36 @@ def _log_gate_decision(state: SwarmState, gate_name: str, approved: bool,
 # Each checks loop limit, reads last_decision, returns next node name.
 
 def route_after_recon(state: SwarmState) -> str:
-    """Route after ARIA (recon phase)."""
+    """Route after ARIA (recon phase).
+
+    v2.5: Force complete cycle — no early abort to report until scanning,
+    vuln detection, and exploitation have all been attempted.
+    """
     try:
         if _check_loop_limit(state, "recon"):
-            print("[LOOP LIMIT] Recon phase exceeded max cycles — forcing abort to report")
-            return "bookkeeper"
+            print("[LOOP LIMIT] Recon phase exceeded max cycles — forcing advance to scan")
+            return "lisa"
 
         decision = state.get("last_decision", "scan")
+
+        # v2.5: Block early abort — force complete cycle
+        if decision in ("report", "insufficient_data_abort"):
+            # Check what phases have actually completed by looking at bot reports
+            eng_dir = state.get("engagement_dir", "")
+            has_lisa = _has_bot_report(eng_dir, "lisa")
+            has_bloodhound = _has_bot_report(eng_dir, "bloodhound")
+            has_marksman = _has_bot_report(eng_dir, "marksman")
+
+            if not has_lisa:
+                print("[FORCE CYCLE] Cannot abort before scanning — forcing Lisa")
+                return "lisa"
+            if not has_bloodhound:
+                print("[FORCE CYCLE] Cannot abort before vuln detection — forcing Bloodhound")
+                return "bloodhound"
+            # If we have vuln findings but no exploitation attempt, force exploitation
+            if not has_marksman and _has_critical_findings(eng_dir):
+                print("[FORCE CYCLE] Critical findings exist but no exploitation — forcing human_approval")
+                return "human_approval"
 
         if decision == "scan":
             return "lisa"
@@ -251,13 +274,30 @@ def route_after_recon(state: SwarmState) -> str:
 
 
 def route_after_scan(state: SwarmState) -> str:
-    """Route after Lisa (scan phase)."""
+    """Route after Lisa (scan phase).
+
+    v2.5: Force complete cycle — no early abort to report until vuln detection
+    and exploitation have been attempted.
+    """
     try:
         if _check_loop_limit(state, "scan"):
-            print("[LOOP LIMIT] Scan phase exceeded max cycles — forcing abort to report")
-            return "bookkeeper"
+            print("[LOOP LIMIT] Scan phase exceeded max cycles — forcing advance to vuln detection")
+            return "bloodhound"
 
         decision = state.get("last_decision", "vulns_found_exploit")
+
+        # v2.5: Block early abort — force complete cycle
+        if decision in ("report", "insufficient_data_abort"):
+            eng_dir = state.get("engagement_dir", "")
+            has_bloodhound = _has_bot_report(eng_dir, "bloodhound")
+            has_marksman = _has_bot_report(eng_dir, "marksman")
+
+            if not has_bloodhound:
+                print("[FORCE CYCLE] Cannot abort before vuln detection — forcing Bloodhound")
+                return "bloodhound"
+            if not has_marksman and _has_critical_findings(eng_dir):
+                print("[FORCE CYCLE] Critical findings exist but no exploitation — forcing human_approval")
+                return "human_approval"
 
         if decision == "vulns_found_exploit":
             return "bloodhound"
@@ -289,13 +329,33 @@ def route_after_scan(state: SwarmState) -> str:
 
 
 def route_after_vuln(state: SwarmState) -> str:
-    """Route after Bloodhound (vuln detection phase)."""
+    """Route after Bloodhound (vuln detection phase).
+
+    v2.5: WarChief must always attempt a complete cycle. If there are Critical
+    findings with CVSS >= 7.0 and exploitation hasn't been attempted yet,
+    FORCE routing to human_approval (exploitation) even if WarChief says 'report'.
+    No early abort to report without exploitation attempt when critical findings exist.
+    """
     try:
         if _check_loop_limit(state, "vuln"):
             print("[LOOP LIMIT] Vuln phase exceeded max cycles — forcing abort to report")
             return "bookkeeper"
 
         decision = state.get("last_decision", "vulns_found_exploit")
+
+        # v2.5: FORCE exploitation if critical findings exist and exploit not attempted
+        if decision in ("report", "insufficient_data_abort"):
+            # Check if exploitation has been attempted
+            exploit_attempted = state.get("mission_state") in ("exploitation", "post_exploit", "reporting", "complete")
+            # Check critical findings count from findings store
+            eng_dir = state.get("engagement_dir", "")
+            has_critical = _has_critical_findings(eng_dir)
+
+            if has_critical and not exploit_attempted:
+                print("[FORCE EXPLOIT] Critical findings exist but exploitation not attempted — forcing human_approval gate")
+                return "human_approval"
+            else:
+                return "bookkeeper"
 
         if decision == "vulns_found_exploit":
             return "human_approval"
@@ -313,6 +373,58 @@ def route_after_vuln(state: SwarmState) -> str:
     except Exception as e:
         print(f"[ROUTING ERROR] route_after_vuln: {e} — defaulting to bookkeeper")
         return "bookkeeper"
+
+
+def _has_bot_report(eng_dir: str, bot_name: str) -> bool:
+    """v2.5: Check if a bot has produced a report (bot_name.md exists in engagement dir)."""
+    try:
+        from pathlib import Path as _P
+        eng_path = _P(eng_dir) if eng_dir else None
+        if not eng_path or not eng_path.exists():
+            return False
+        report_path = eng_path / f"{bot_name}.md"
+        if report_path.exists() and report_path.stat().st_size > 100:
+            return True
+        # Also check JSONL findings file
+        jsonl_path = eng_path / f"findings_{bot_name}.jsonl"
+        if jsonl_path.exists() and jsonl_path.stat().st_size > 10:
+            return True
+        return False
+    except Exception:
+        return False
+
+
+def _has_critical_findings(eng_dir: str) -> bool:
+    """v2.5: Check if any findings with CVSS >= 7.0 exist in the findings store."""
+    try:
+        from pathlib import Path
+        import json as _json
+        eng_path = Path(eng_dir) if eng_dir else None
+        if not eng_path or not eng_path.exists():
+            return False
+        # Check critical findings buffer
+        critical_path = eng_path / "critical_findings.json"
+        if critical_path.exists():
+            data = _json.loads(critical_path.read_text())
+            if isinstance(data, list) and len(data) > 0:
+                return True
+            if isinstance(data, dict) and data.get("findings"):
+                return True
+        # Also check findings JSONL files for high CVSS
+        for jsonl in eng_path.glob("findings_*.jsonl"):
+            try:
+                for line in jsonl.read_text().strip().split('\n'):
+                    if not line:
+                        continue
+                    finding = _json.loads(line)
+                    cvss = finding.get("cvss")
+                    if cvss and isinstance(cvss, (int, float)) and cvss >= 7.0:
+                        return True
+            except Exception:
+                continue
+        return False
+    except Exception:
+        return False
 
 
 def route_after_exploit(state: SwarmState) -> str:
@@ -344,7 +456,7 @@ def route_after_exploit(state: SwarmState) -> str:
         if decision == "privesc":
             return "magician"
         elif decision == "continue_exploit":
-            return "surgeon"
+            return "marksman"
         elif decision in ("lateral_recon", "lateral_scan"):
             return "lateral_approval"
         elif decision == "recon" and target_context == "lateral":
@@ -375,7 +487,7 @@ def route_after_privesc(state: SwarmState) -> str:
         elif decision in ("lateral_recon", "lateral_scan"):
             return "lateral_approval"
         elif decision == "continue_exploit":
-            return "surgeon"
+            return "marksman"
         elif decision in ("report", "insufficient_data_abort"):
             return "bookkeeper"
         else:
@@ -402,7 +514,7 @@ def route_after_exfil(state: SwarmState) -> str:
         elif decision in ("lateral_recon", "lateral_scan"):
             return "lateral_approval"
         elif decision == "continue_exploit":
-            return "surgeon"
+            return "marksman"
         elif decision == "insufficient_data_abort":
             return "bookkeeper"
         else:
@@ -462,8 +574,8 @@ def _unified_router(state: SwarmState) -> str:
         reasoning_reports = state.get("reasoning_reports", {})
         if not isinstance(reasoning_reports, dict):
             reasoning_reports = {}
-        bot_order = ["warchief", "aria", "lisa", "bloodhound",
-                     "pathologist", "surgeon", "magician", "thief"]
+        bot_order = ["warchief", "aria", "lisa", "bloodhound", "wasp",
+                     "marksman", "magician", "thief"]
         # Find the last non-warchief bot that ran
         last_bot = "warchief"
         for bot in reversed(bot_order):
@@ -506,8 +618,25 @@ def _unified_router(state: SwarmState) -> str:
                     print(f"[NO PROGRESS] Same decision '{stuck_decision}' 3 times — forcing abort to report")
                     return "bookkeeper"
 
-        # Explicit report/abort — always go to bookkeeper
+        # v2.5: Explicit report/abort — check if complete cycle was attempted first
         if decision in ("report", "insufficient_data_abort"):
+            # Force complete cycle: no abort before scan/vuln/exploit
+            eng_dir = state.get("engagement_dir", "")
+            has_lisa = _has_bot_report(eng_dir, "lisa")
+            has_bloodhound = _has_bot_report(eng_dir, "bloodhound")
+            has_marksman = _has_bot_report(eng_dir, "marksman")
+            has_critical = _has_critical_findings(eng_dir)
+
+            if not has_lisa:
+                print("[FORCE CYCLE] WarChief wants report but Lisa never ran — forcing Lisa")
+                return "lisa"
+            if not has_bloodhound:
+                print("[FORCE CYCLE] WarChief wants report but Bloodhound never ran — forcing Bloodhound")
+                return "bloodhound"
+            if not has_marksman and has_critical:
+                print("[FORCE CYCLE] WarChief wants report but critical findings exist and Marksman never ran — forcing human_approval")
+                return "human_approval"
+            # All phases attempted — OK to report
             return "bookkeeper"
 
         # Lateral movement — always through approval gate
@@ -519,8 +648,8 @@ def _unified_router(state: SwarmState) -> str:
             "aria": route_after_recon,
             "lisa": route_after_scan,
             "bloodhound": route_after_vuln,
-            "pathologist": route_after_exploit,
-            "surgeon": route_after_exploit,
+            "wasp": route_after_vuln,
+            "marksman": route_after_exploit,
             "magician": route_after_privesc,
             "thief": lambda s: "bookkeeper",
         }
@@ -537,7 +666,7 @@ def _unified_router(state: SwarmState) -> str:
             "scan": "lisa",
             "vuln_detection": "bloodhound",
             "vulns_found_exploit": "human_approval",
-            "continue_exploit": "surgeon",
+            "continue_exploit": "marksman",
             "privesc": "magician",
             "exfiltrate": "thief",
         }
@@ -559,6 +688,15 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
     """
 
     workflow = StateGraph(SwarmState)
+
+    # v2.5: Checkpoint helper — saves state after each node
+    def _checkpoint(state: SwarmState, node_name: str = "") -> None:
+        try:
+            eng_dir = state.get("engagement_dir")
+            if eng_dir:
+                save_checkpoint(Path(eng_dir), dict(state))
+        except Exception as e:
+            print(f"[CHECKPOINT ERROR] {e}")
 
     # ─── Node functions ───
 
@@ -820,24 +958,17 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
             print(f"[SCOPE EXPANSION ERROR] {e} — no targets added")
         return state
 
-    async def pathologist_node(state: SwarmState) -> SwarmState:
-        """Pathologist — payload fabrication. On failure: logged, graph continues."""
-        try:
-            bot = Pathologist(state, swarm_config)
-            await bot.run()
-        except Exception as e:
-            print(f"[PATHOLOGIST ERROR] {e}")
-            _log_error(state, "PATHOLOGIST", e)
-        return state
+    async def marksman_node(state: SwarmState) -> SwarmState:
+        """Marksman — exploit research and exploitation. On failure: WarChief reroutes.
 
-    async def surgeon_node(state: SwarmState) -> SwarmState:
-        """Surgeon — exploitation. On failure: WarChief reroutes."""
+        Merges Pathologist (research/development) and Surgeon (execution/delivery).
+        """
         try:
-            bot = Surgeon(state, swarm_config)
+            bot = Marksman(state, swarm_config)
             await bot.run()
         except Exception as e:
-            print(f"[SURGEON ERROR] {e}")
-            _log_error(state, "SURGEON", e)
+            print(f"[MARKSMAN ERROR] {e}")
+            _log_error(state, "MARKSMAN", e)
         return state
 
     async def magician_node(state: SwarmState) -> SwarmState:
@@ -894,19 +1025,29 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
                 print("[BOOKKEEPER] Could not write error report")
         return state
 
-    # ─── Add all nodes ───
-    workflow.add_node("warchief", warchief_node)
-    workflow.add_node("aria", aria_node)
-    workflow.add_node("lisa", lisa_node)
-    workflow.add_node("bloodhound", bloodhound_node)
-    workflow.add_node("human_approval", human_approval_node)
-    workflow.add_node("lateral_approval", lateral_approval_node)
-    workflow.add_node("scope_expansion", scope_expansion_node)
-    workflow.add_node("pathologist", pathologist_node)
-    workflow.add_node("surgeon", surgeon_node)
-    workflow.add_node("magician", magician_node)
-    workflow.add_node("thief", thief_node)
-    workflow.add_node("bookkeeper", bookkeeper_node)
+    # ─── Add all nodes (v2.5: wrapped with checkpoint) ───
+    def _with_checkpoint(node_func, name):
+        """Wrap a node function to save checkpoint after execution."""
+        async def wrapped(state):
+            if asyncio.iscoroutinefunction(node_func):
+                result = await node_func(state)
+            else:
+                result = node_func(state)
+            _checkpoint(result, name)
+            return result
+        return wrapped
+
+    workflow.add_node("warchief", _with_checkpoint(warchief_node, "warchief"))
+    workflow.add_node("aria", _with_checkpoint(aria_node, "aria"))
+    workflow.add_node("lisa", _with_checkpoint(lisa_node, "lisa"))
+    workflow.add_node("bloodhound", _with_checkpoint(bloodhound_node, "bloodhound"))
+    workflow.add_node("human_approval", _with_checkpoint(human_approval_node, "human_approval"))
+    workflow.add_node("lateral_approval", _with_checkpoint(lateral_approval_node, "lateral_approval"))
+    workflow.add_node("scope_expansion", _with_checkpoint(scope_expansion_node, "scope_expansion"))
+    workflow.add_node("marksman", _with_checkpoint(marksman_node, "marksman"))
+    workflow.add_node("magician", _with_checkpoint(magician_node, "magician"))
+    workflow.add_node("thief", _with_checkpoint(thief_node, "thief"))
+    workflow.add_node("bookkeeper", _with_checkpoint(bookkeeper_node, "bookkeeper"))
 
     # ─── Edges: Adaptive routing ───
 
@@ -917,7 +1058,7 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
     workflow.add_edge("aria", "warchief")
     workflow.add_edge("lisa", "warchief")
     workflow.add_edge("bloodhound", "warchief")
-    workflow.add_edge("surgeon", "warchief")
+    workflow.add_edge("marksman", "warchief")
     workflow.add_edge("magician", "warchief")
     workflow.add_edge("thief", "warchief")
 
@@ -930,8 +1071,7 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
             "lisa": "lisa",
             "bloodhound": "bloodhound",
             "human_approval": "human_approval",
-            "pathologist": "pathologist",
-            "surgeon": "surgeon",
+            "marksman": "marksman",
             "magician": "magician",
             "thief": "thief",
             "lateral_approval": "lateral_approval",
@@ -943,15 +1083,12 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
     # Scope expansion → back to WarChief (after user decision, WarChief routes normally)
     workflow.add_edge("scope_expansion", "warchief")
 
-    # Human approval → Pathologist (approved) or Bookkeeper (denied)
+    # Human approval → Marksman (approved) or Bookkeeper (denied)
     workflow.add_conditional_edges(
         "human_approval",
-        lambda state: "pathologist" if state.get("human_approval") else "bookkeeper",
-        {"pathologist": "pathologist", "bookkeeper": "bookkeeper"},
+        lambda state: "marksman" if state.get("human_approval") else "bookkeeper",
+        {"marksman": "marksman", "bookkeeper": "bookkeeper"},
     )
-
-    # Pathologist → Surgeon (linear within exploitation phase)
-    workflow.add_edge("pathologist", "surgeon")
 
     # Lateral approval → conditional (approved: ARIA/Lisa, denied: Bookkeeper)
     workflow.add_conditional_edges(

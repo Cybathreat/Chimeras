@@ -77,6 +77,13 @@ def parse_llm_json(response: str,
     if result is not None:
         return _validate(result, schema)
 
+    # Strategy 6: v2.5 — JSON repair for truncated responses
+    # If the JSON is incomplete (more open than close braces), try to
+    # close braces/brackets and salvage what we have
+    result = _repair_truncated_json(stripped)
+    if result is not None:
+        return _validate(result, schema)
+
     # Check for truncation
     if max_tokens_retry:
         _check_truncation(stripped)
@@ -142,6 +149,59 @@ def _check_truncation(text: str) -> None:
             f"close braces: {close_braces}). Likely max_tokens limit hit. "
             f"Response starts: {text[:200]}..."
         )
+
+
+def _repair_truncated_json(text: str) -> Optional[Dict[str, Any]]:
+    """v2.5: Attempt to repair truncated JSON by closing open braces/brackets.
+
+    When LLM output is cut off mid-JSON, we try to salvage what we have by:
+    1. Finding the last complete key-value pair
+    2. Closing any open arrays and objects
+    3. Parsing the repaired string
+
+    This is a last resort — better to have partial findings than none.
+    """
+    if "{" not in text:
+        return None
+
+    open_braces = text.count("{")
+    close_braces = text.count("}")
+    open_brackets = text.count("[")
+    close_brackets = text.count("]")
+
+    if open_braces <= close_braces and open_brackets <= close_brackets:
+        return None  # Not truncated, don't repair
+
+    # Strip incomplete trailing content — find last complete value
+    # Remove trailing incomplete string (no closing quote)
+    repaired = text.rstrip()
+    if repaired.endswith(","):
+        repaired = repaired[:-1]
+    # Remove trailing incomplete content after last comma
+    last_comma = repaired.rfind(",")
+    last_colon = repaired.rfind(":")
+    if last_comma > last_colon and last_comma > 0:
+        # Check if there's an incomplete value after the last comma
+        after_comma = repaired[last_comma + 1:].strip()
+        if after_comma and not after_comma.startswith('"') and not after_comma.startswith('{') and not after_comma.startswith('['):
+            # Incomplete value — truncate at last comma
+            repaired = repaired[:last_comma]
+
+    # Close open brackets and braces
+    open_b = text.count("[") - text.count("]")
+    open_c = text.count("{") - text.count("}")
+
+    # Add missing close brackets
+    for _ in range(max(0, open_b)):
+        repaired += "]"
+    # Add missing close braces
+    for _ in range(max(0, open_c)):
+        repaired += "}"
+
+    result = _try_parse(repaired)
+    if result is not None:
+        logger.info(f"JSON repair succeeded — salvaged {len(str(result))} chars from truncated response")
+    return result
 
 
 def _validate(data: Dict[str, Any], schema: Optional[type]) -> Dict[str, Any]:

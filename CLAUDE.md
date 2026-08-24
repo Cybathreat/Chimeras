@@ -1,7 +1,7 @@
-# CLAUDE.md — Chimeras v2.4 Development Context
+# CLAUDE.md — Chimeras v2.5 Development Context
 
 ## Project
-Chimeras is an autonomous AI pentest swarm with adaptive decision-making. 10 bots (9 specialists + WarChief orchestrator), each powered by an independently assigned LLM, each reasoning autonomously about what tools to run and what strategy to use. No hardcoded tool lists — bots declare a tool category and the LLM picks tools dynamically. WarChief acts as a decision router, re-entering after each phase to adapt the engagement based on actual findings. WarChief is also a compliance officer and quality checker — he verifies every bot's output against real pentest standards.
+Chimeras is an autonomous AI pentest swarm with adaptive decision-making. 9 bots (8 specialists + WarChief orchestrator), each powered by an independently assigned LLM, each reasoning autonomously about what tools to run and what strategy to use. No hardcoded tool lists — bots declare a tool category and the LLM picks tools dynamically. WarChief acts as a decision router, re-entering after each phase to adapt the engagement based on actual findings. WarChief is also a compliance officer and quality checker — he verifies every bot's output against real pentest standards.
 
 ## Stack
 - Python 3.11+
@@ -28,7 +28,7 @@ WarChief is the entry point and decision router. After each phase bot completes,
 
 ```
 WarChief (init) → ARIA → WarChief (route) → Lisa → WarChief (route)
-→ Bloodhound+Wasp (parallel vuln detection) → WarChief (route) → [HUMAN GATE] → Pathologist → Surgeon
+→ Bloodhound+Wasp (parallel vuln detection) → WarChief (route) → [HUMAN GATE] → Marksman
 → WarChief (route) → Magician → Thief → WarChief (final) → Bookkeeper → END
 ```
 
@@ -54,8 +54,7 @@ Bots declare a category in `core/scope.py` (`BOT_CATEGORIES`):
 - Lisa → `active_scan` (nmap, nikto, gobuster, ffuf, wpscan, ...)
 - Bloodhound → `vuln_detection` (nuclei, searchsploit, wapiti, ssh-audit, sslscan, ...)
 - Wasp → `web_exploit` (sqlmap, nikto, nuclei, curl, ffuf, wfuzz, dalfox, commix, ...) — runs IN PARALLEL with Bloodhound
-- Pathologist → `payload_fab` (msfvenom, msfconsole, searchsploit, curl)
-- Surgeon → `exploitation` (msfconsole, sqlmap, nc, python3, bash, ...)
+- Marksman → `marksman` (msfvenom, msfconsole, searchsploit, sqlmap, curl, nc, python3, bash, exploit, git, gdb, strace, objdump, ROPgadget, gcc, docker) — exploit researcher AND operator (merged Pathologist+Surgeon)
 - Magician → `privesc` (linpeas, find, cat, ssh, smbclient, ...)
 - Thief → `exfiltration` (curl, wget, nc, tar, scp, rsync, ...)
 - WarChief/Bookkeeper → `none` (no tool execution)
@@ -134,11 +133,9 @@ Chimeras/
 ├── wasp/
 │   ├── agent.py          # Web app vuln DETECTION — runs parallel with Bloodhound
 │   └── soul.md           # Wasp identity — OWASP Top 10, web layer
-├── pathologist/
-│   └── agent.py          # Payload fabrication
-├── surgeon/
-│   ├── agent.py          # Exploitation + lateral exploitation + failed vector tracking + artifact tracking
-│   └── soul.md           # Surgeon identity — exploitation standards
+├── marksman/
+│   ├── agent.py          # Exploit research + exploitation + lateral + artifact tracking (merged Pathologist+Surgeon)
+│   └── soul.md           # Marksman identity — exploit researcher & operator
 ├── magician/
 │   └── agent.py          # Privesc + lateral movement + artifact tracking
 ├── thief/
