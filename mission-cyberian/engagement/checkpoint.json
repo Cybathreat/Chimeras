@@ -1,6 +1,6 @@
 {
-  "saved_at": "2026-09-02T21:41:53.643072",
-  "mission_state": "init",
+  "saved_at": "2026-09-02T21:45:00.276829",
+  "mission_state": "scanning",
   "last_decision": "report",
   "state": {
     "mission": {
@@ -9,7 +9,8 @@
       "created": "2026-08-24T01:39:52.582365",
       "scope": "cyberian-defenses.com",
       "target": "cyberian-defenses.com",
-      "lateral_objectives": ""
+      "lateral_objectives": "",
+      "phase": "scanning"
     },
     "swarm_config": {
       "version": "2.0",
@@ -71,12 +72,38 @@
       "enable_docker": true
     },
     "engagement_dir": "mission-cyberian/engagement",
+    "reasoning_reports": {
+      "warchief": {
+        "needed": true,
+        "strategy": "ARIA has completed initial passive reconnaissance on cyberian-defenses.com. Route to Lisa for active scanning \u2014 full TCP port range, UDP key ports, service version detection, OS fingerprinting, and per-service enumeration based on ARIA's attack surface map.",
+        "confidence": 0.85,
+        "reasoning": "ARIA reported with 0.95 confidence indicating recon phase is complete. ARIA ran whatweb, httpx, WAF/CDN detection, subdomain permutation checks, and tech stack identification. The attack surface map has been built. Next logical step is Lisa's active scanning to produce a versioned service map. No loops detected \u2014 this is the first recon-to-scan transition.",
+        "assessment": "Init phase complete. ARIA has performed initial passive recon on cyberian-defenses.com including DNS enumeration, subdomain discovery, tech stack fingerprinting, and WAF/CDN identification. Ready to transition to active scanning phase.",
+        "scope_change": {
+          "add": [],
+          "remove": []
+        },
+        "forbid": [],
+        "depth_assessment": [
+          {
+            "finding": "ARIA passive recon on cyberian-defenses.com",
+            "verdict": "thorough",
+            "missed_followups": [],
+            "redispatch_instructions": ""
+          }
+        ],
+        "depth_gap_carryforward": "ARIA's full findings are truncated in this view. When Lisa reports back, verify ARIA's subdomain list, tech stack versions, and WAF identification were included. If versionless tech fingerprinting is discovered, re-dispatch ARIA for version identification before CVE matching.",
+        "updated_plan": "## Engagement Plan \u2014 cyberian-defenses.com\n\n### Phase 1: Reconnaissance (COMPLETE)\n- ARIA performed passive recon: DNS enumeration, subdomain discovery, certificate transparency, tech stack fingerprinting, WAF/CDN identification\n- Confidence: 0.95\n\n### Phase 2: Active Scanning (IN PROGRESS)\n- Dispatch Lisa for active scanning of cyberian-defenses.com and discovered subdomains\n- Requirements: Full TCP port range (1-65535), UDP scan for key services (53, 161, 123, 137-139, 500), service version detection with banners, OS fingerprinting, NSE scripts, per-service enumeration\n- Cautious aggressiveness \u2014 if WAF detected, do not escalate to aggressive scanning\n\n### Phase 3: Vulnerability Detection (PENDING)\n- Bloodhound (infrastructure) + Wasp (web application) in parallel after Lisa reports\n\n### Phase 4: Exploitation (PENDING \u2014 Human Gate)\n- Marksman after Bloodhound+Wasp confirm exploitable findings\n\n### Phase 5: Post-Exploitation (PENDING)\n- Magician (privesc) \u2192 Thief (exfil) \u2014 sequential\n\n### Phase 6: Reporting (PENDING)\n- Bookkeeper synthesizes all findings into client-grade report",
+        "mission_phase": "scanning"
+      }
+    },
     "human_approval": true,
     "lateral_approval": true,
     "abort_flag": false,
     "last_decision": "report",
     "loop_count": {
-      "scan": 443
+      "recon": 1,
+      "scan": 1
     },
     "max_loops_per_phase": 5,
     "discovered_targets": [],
@@ -89,11 +116,21 @@
     "target_artifacts": [],
     "failed_vectors": [],
     "aggressiveness": "cautious",
-    "decision_history": [],
-    "mission_state": "init",
+    "decision_history": [
+      {
+        "decision": "report",
+        "reasoning": "ARIA reported with 0.95 confidence indicating recon phase is complete. ARIA ran whatweb, httpx, WAF/CDN detection, subdomain permutation checks, and tech stack identification. The attack surface map has been built. Next logical step is Lisa's active scanning to produce a versioned service map. No loops detected \u2014 this is the first recon-to-scan transition.",
+        "phase": "scanning",
+        "confidence": 0.85,
+        "timestamp": "2026-09-02T21:44:32.153084",
+        "overrides": null
+      }
+    ],
+    "mission_state": "scanning",
     "scope_exhausted": false,
     "confidence_threshold": 0.6,
     "scope_expansion_candidates": [],
-    "approved_extra_targets": []
+    "approved_extra_targets": [],
+    "depth_gap_carryforward": ""
   }
 }

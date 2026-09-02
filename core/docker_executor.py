@@ -219,6 +219,15 @@ class TieredDockerExecutor:
         self.mission_domains = mission_domains
         self.ttl = ttl
         
+        # Docker volume mounts need ABSOLUTE paths — resolve early,
+        # refuse to operate on relative paths (they'd create bogus volumes)
+        eng_path = Path(engagement_dir)
+        if not eng_path.is_absolute():
+            eng_path = (Path.cwd() / eng_path).resolve()
+        self.engagement_dir = str(eng_path)
+        self.mission_scope = mission_scope
+        self.mission_domains = mission_domains
+        
         self.tier = BOT_TIER.get(bot_name, "exploit")
         self.image = IMAGE_NAMES.get(self.tier, IMAGE_NAMES["exploit"])
         self.resources = BOT_RESOURCES.get(bot_name, BOT_RESOURCES["marksman"])

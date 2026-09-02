@@ -78,7 +78,7 @@ class BaseBot(ABC):
             
             self.docker_executor = TieredDockerExecutor(
                 bot_name=self.bot_name,
-                engagement_dir=str(self.engagement_dir) if self.engagement_dir else "/tmp/chimeras-engagement",
+                engagement_dir=str(self.engagement_dir.resolve()) if self.engagement_dir else "/tmp/chimeras-engagement",
                 mission_scope=scope_ips,
                 mission_domains=scope_domains,
             )
