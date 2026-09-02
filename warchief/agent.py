@@ -437,6 +437,26 @@ If you are unsure, default to "scan" to gather more data, or "report" if scope i
                                 approved.append(t)
                         self.state["approved_extra_targets"] = approved
                         self._log(f"Scope expanded by WarChief: +{validated_targets}", "SCOPE")
+                        # v3.0: propagate to LIVE container firewalls — kernel rules
+                        # updated instantly so bots can reach the new targets
+                        try:
+                            from core.docker_executor import expand_all_scopes, live_containers
+                            new_ips = ",".join(t for t in validated_targets)
+                            new_domains = ",".join(
+                                t for t in validated_targets
+                                if not t.replace(".", "").isdigit() and "/" not in t
+                            )
+                            live = live_containers()
+                            if live:
+                                fw = expand_all_scopes(new_ips, new_domains)
+                                ok_bots = [b for b, s in fw.items() if s]
+                                fail_bots = [b for b, s in fw.items() if not s]
+                                self._log(
+                                    f"Firewall scope pushed to live containers: OK={ok_bots} FAILED={fail_bots}",
+                                    "DOCKER",
+                                )
+                        except Exception as e:
+                            self._log(f"Firewall scope propagation failed (non-fatal): {e}", "WARN")
                         # Invalidate tool cache on scope change
                         self.tool_cache.update_scope_version(
                             self.tool_cache.scope_version + 1

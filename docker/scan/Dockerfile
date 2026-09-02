@@ -42,12 +42,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     ncat \
     nftables \
+    wfuzz \
     && rm -rf /var/lib/apt/lists/*
 
 # One pip package per RUN — a failure never cascades, and is VISIBLE at build time
 RUN pip3 install --break-system-packages wafw00f
 RUN pip3 install --break-system-packages ssh-audit
-RUN pip3 install --break-system-packages wfuzz
 RUN pip3 install --break-system-packages arjun
 
 COPY --from=gobuilder /out/bin/ /usr/local/bin/

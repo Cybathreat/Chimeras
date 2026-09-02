@@ -37,6 +37,38 @@ from typing import Dict, Any, Optional, List
 logger = logging.getLogger(__name__)
 
 # ============================================================
+# LIVE EXECUTOR REGISTRY — WarChief pushes scope to running containers
+# ============================================================
+# Every TieredDockerExecutor with a running container registers itself.
+# When WarChief expands scope (scope_change decision), the swarm calls
+# expand_all_scopes() and every LIVE bot container's kernel firewall is
+# updated instantly — no restart, no stale firewalls.
+_LIVE_EXECUTORS: List["TieredDockerExecutor"] = []
+
+
+def expand_all_scopes(new_ips: str, new_domains: str = "") -> Dict[str, bool]:
+    """Push a scope expansion to every running bot container.
+    
+    Called by the swarm orchestrator after WarChief's scope_change
+    decision passes validation. Returns per-bot success map.
+    """
+    results: Dict[str, bool] = {}
+    for ex in list(_LIVE_EXECUTORS):
+        try:
+            results[ex.bot_name] = ex.expand_scope(new_ips, new_domains)
+        except Exception as e:
+            logger.error(f"[{ex.bot_name}] expand_all_scopes error: {e}")
+            results[ex.bot_name] = False
+    if results:
+        logger.info(f"Scope expansion propagated to {len(results)} live containers")
+    return results
+
+
+def live_containers() -> List[str]:
+    """Names of bots with running containers."""
+    return [ex.bot_name for ex in _LIVE_EXECUTORS if ex._container_name]
+
+# ============================================================
 # TIERED IMAGE MAPPING — bot → image tier
 # ============================================================
 BOT_TIER = {
@@ -293,6 +325,10 @@ class TieredDockerExecutor:
             
             self._container_name = container_name
             
+            # Register in live-executor registry (WarChief scope propagation)
+            if self not in _LIVE_EXECUTORS:
+                _LIVE_EXECUTORS.append(self)
+            
             # Host-side firewall injection (container has no NET_ADMIN — cannot self-modify)
             if self._inject_firewall():
                 self._append_evidence({
@@ -508,6 +544,11 @@ class TieredDockerExecutor:
     def cleanup(self) -> None:
         """Stop and remove the container."""
         if self._container_name:
+            # Unregister from live-executor registry
+            try:
+                _LIVE_EXECUTORS.remove(self)
+            except ValueError:
+                pass
             try:
                 subprocess.run(
                     ["docker", "stop", self._container_name],
