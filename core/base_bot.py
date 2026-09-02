@@ -645,7 +645,17 @@ class BaseBot(ABC):
         """
         category = ScopeEnforcer.get_bot_category(self.bot_name)
         allowed_tools = sorted(ScopeEnforcer.get_allowed_tools(self.bot_name))
-        installed = ScopeEnforcer._discover_installed_tools()
+        # v3.0: With Docker mode, tools live in the bot's tier image —
+        # discover them THERE, not on the host. The LLM must see the tools
+        # it will actually be able to run.
+        if self.docker_executor is not None:
+            try:
+                from core.docker_executor import discover_image_tools
+                installed = discover_image_tools(self.docker_executor.image)
+            except Exception:
+                installed = ScopeEnforcer._discover_installed_tools()
+        else:
+            installed = ScopeEnforcer._discover_installed_tools()
         available_str = ", ".join(sorted(set(allowed_tools) & installed)) if allowed_tools else "NONE"
 
         # Pipeline position hints — no hardcoded tool names

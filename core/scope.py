@@ -38,19 +38,19 @@ TOOL_CATEGORIES: Dict[str, Set[str]] = {
     },
     "active_scan": {
         "nmap", "masscan", "naabu", "gobuster", "ffuf",
-        "wpscan", "sslscan", "testssl", "enum4linux-ng",
+        "wpscan", "sslscan", "testssl.sh", "enum4linux-ng",
         "whatweb", "httpx", "dnsx", "ping",
     },
     "vuln_detection": {
         "nmap", "nuclei", "searchsploit", "netexec",
-        "ssh-audit", "sslscan", "testssl",
+        "ssh-audit", "sslscan", "testssl.sh",
     },
     "marksman": {
         "msfvenom", "msfconsole", "searchsploit", "curl", "sqlmap",
         "nc", "ncat", "netcat", "python3", "bash", "exploit",
-        "git", "gdb", "strace", "objdump", "ROPgadget", "gcc", "docker",
-        "hydra", "john", "mimikatz", "evil-winrm", "impacket",
-        "responder", "bloodhound", "netexec", "socat",
+        "git", "gdb", "strace", "objdump", "gcc",
+        "hydra", "john", "evil-winrm", "impacket-secretsdump",
+        "responder", "bloodhound-python", "netexec", "socat",
     },
     "web_exploit": {
         "sqlmap", "nuclei", "curl", "python3",
@@ -58,9 +58,9 @@ TOOL_CATEGORIES: Dict[str, Set[str]] = {
         "gobuster", "arjun", "httpx",
     },
     "privesc": {
-        "linpeas", "winpeas", "pspy", "les", "find", "cat", "ls",
+        "linpeas", "pspy", "les", "find", "cat", "ls",
         "python3", "bash", "ssh", "smbclient", "netexec",
-        "impacket-secretsdump", "mimikatz",
+        "impacket-secretsdump",
     },
     "exfiltration": {
         "curl", "wget", "nc", "netcat", "python3", "bash", "tar", "gzip",
@@ -640,6 +640,19 @@ class ScopeEnforcer:
     _installed_tools_cache: Set[str] = set()
     _installed_tools_cache_time: float = 0.0
     _installed_tools_cache_ttl: float = 300.0
+    # v3.0: Docker mode override — when set, tool discovery reports what's
+    # in the bot's tier image instead of what's on the host.
+    _image_tools_override: Optional[Set[str]] = None
+
+    @staticmethod
+    def set_image_tools(tools: Optional[Set[str]]) -> None:
+        """Override tool discovery with image-side tools (Docker mode).
+
+        Pass the union of all tier images' tools so host-mode checks stay
+        permissive; per-bot filtering happens via category ∩ allowed anyway.
+        Call with None to return to host-side discovery.
+        """
+        ScopeEnforcer._image_tools_override = set(tools) if tools else None
 
     @staticmethod
     def _discover_installed_tools() -> Set[str]:
@@ -649,6 +662,9 @@ class ScopeEnforcer:
         calls on every bot init.
         """
         import time as _time
+        # v3.0: Docker mode override — image tools replace host discovery
+        if ScopeEnforcer._image_tools_override is not None:
+            return set(ScopeEnforcer._image_tools_override)
         now = _time.time()
         if ScopeEnforcer._installed_tools_cache and (now - ScopeEnforcer._installed_tools_cache_time) < ScopeEnforcer._installed_tools_cache_ttl:
             return ScopeEnforcer._installed_tools_cache

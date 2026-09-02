@@ -1,0 +1,4 @@
+{"timestamp": "2026-09-02T22:21:11.197724", "bot": "bloodhound", "cvss": 8.1, "target": "cyberian-defenses.com (76.13.46.223)", "tool": "", "finding": "OpenSSH 9.6p1 \u2014 CVE-2024-6387 (regreSSHion) RCE"}
+{"timestamp": "2026-09-02T22:24:40.689662", "bot": "warchief", "cvss": 8.1, "target": "cyberian-defenses.com", "tool": "", "finding": "CVE-2024-6387 regreSSHion RCE \u2014 OpenSSH 9.6p1 in affected range"}
+{"timestamp": "2026-09-02T22:26:01.878233", "bot": "warchief", "cvss": 8.1, "target": "cyberian-defenses.com", "tool": "", "finding": "CVE-2024-6387 regreSSHion RCE on OpenSSH 9.6p1"}
+{"timestamp": "2026-09-02T22:31:10.709980", "bot": "warchief", "cvss": 8.1, "target": "cyberian-defenses.com", "tool": "", "finding": "CVE-2024-6387 regreSSHion RCE on OpenSSH 9.6p1"}

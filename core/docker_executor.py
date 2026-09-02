@@ -68,6 +68,55 @@ def live_containers() -> List[str]:
     """Names of bots with running containers."""
     return [ex.bot_name for ex in _LIVE_EXECUTORS if ex._container_name]
 
+
+# ============================================================
+# IMAGE-SIDE TOOL DISCOVERY
+# ============================================================
+# The LLM can only pick tools it can see. With Docker mode, tools live in
+# the tier image, NOT on the host — shutil.which() on the host showed bots
+# "not installed: msfconsole, ffuf, masscan" while those tools sat unused
+# inside their own containers. This discovers tools the way the bot will
+# actually run them.
+
+_IMAGE_TOOLS_CACHE: Dict[str, frozenset] = {}
+
+
+def discover_image_tools(image: str, candidate_tools: Optional[set] = None) -> frozenset:
+    """Discover which candidate tools exist inside a tier image.
+
+    Runs one shell loop inside a throwaway container. Cached per image —
+    images are immutable between builds, so this is stable.
+    """
+    if image in _IMAGE_TOOLS_CACHE:
+        return _IMAGE_TOOLS_CACHE[image]
+
+    if candidate_tools is None:
+        from core.scope import TOOL_CATEGORIES
+        candidate_tools = set()
+        for tools in TOOL_CATEGORIES.values():
+            candidate_tools.update(tools)
+
+    if not candidate_tools:
+        return frozenset()
+
+    tool_list = " ".join(sorted(candidate_tools))
+    probe = (
+        f"for t in {tool_list}; do "
+        f"command -v \"$t\" >/dev/null 2>&1 && echo \"$t\"; done"
+    )
+    try:
+        result = subprocess.run(
+            ["docker", "run", "--rm", "--entrypoint", "sh", image, "-c", probe],
+            capture_output=True, text=True, timeout=60,
+        )
+        found = frozenset(line.strip() for line in result.stdout.splitlines() if line.strip())
+    except Exception as e:
+        logger.error(f"Image tool discovery failed for {image}: {e}")
+        found = frozenset()
+
+    _IMAGE_TOOLS_CACHE[image] = found
+    return found
+
 # ============================================================
 # TIERED IMAGE MAPPING — bot → image tier
 # ============================================================

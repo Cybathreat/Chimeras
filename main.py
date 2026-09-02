@@ -153,6 +153,22 @@ async def run_operation(mission_dir: Path, swarm_config: dict, auto_approve: boo
         enable_docker=swarm_config.get("enable_docker", False),
     )
 
+    # v3.0: Docker mode — tool discovery must see INSIDE the tier images.
+    # Union of all tier images' tools; per-bot filtering happens via
+    # category ∩ installed when prompts are built.
+    if state["enable_docker"]:
+        try:
+            from core.docker_executor import IMAGE_NAMES, discover_image_tools
+            union: set = set()
+            for _img in IMAGE_NAMES.values():
+                union |= set(discover_image_tools(_img))
+            if union:
+                from core.scope import ScopeEnforcer
+                ScopeEnforcer.set_image_tools(union)
+                print(f"[DOCKER] Tool discovery: {len(union)} tools found across tier images")
+        except Exception as e:
+            print(f"[DOCKER] Image tool discovery failed — host discovery in effect: {e}")
+
     # v2.5: Override with saved state if resuming from checkpoint
     if saved_state:
         for key, value in saved_state.items():
