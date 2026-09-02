@@ -2,7 +2,7 @@
 Chimeras v2.0 — Bloodhound Agent
 
 Vulnerability hunter. Identifies CVEs, misconfigs, scores them.
-Scope: nmap scripts, nuclei, searchsploit, nikto
+Scope: nmap scripts, nuclei, searchsploit, netexec, ssh-audit, sslscan, testssl
 
 v2 Phase 4: WAF/IPS detection and aggressiveness calibration.
   - Detects WAF signs (403 rates, rate limiting, connection resets)

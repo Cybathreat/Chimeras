@@ -1,5 +1,5 @@
 # Chimeras v3.0 — Tier 1: Recon Slim Image (ARIA)
-# ~200MB. DNS + passive recon only. Minimal attack surface.
+# DNS + passive recon only. Minimal attack surface.
 FROM kalilinux/kali-rolling:latest AS gobuilder
 
 RUN apt-get update && apt-get install -y --no-install-recommends golang-go git ca-certificates && \
@@ -21,14 +21,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     whois \
     curl \
     whatweb \
+    iputils-ping \
     python3 \
     python3-pip \
     jq \
+    nftables \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --break-system-packages wafw00f || true
+RUN pip3 install --break-system-packages wafw00f
 
 COPY --from=gobuilder /out/bin/ /usr/local/bin/
+
+COPY entrypoint.sh /usr/local/bin/chimeras-entrypoint.sh
+RUN chmod +x /usr/local/bin/chimeras-entrypoint.sh
 
 RUN useradd -m -s /bin/bash pentester && \
     echo "pentester ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers

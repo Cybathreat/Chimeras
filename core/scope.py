@@ -30,40 +30,42 @@ import socket
 # Bots reference categories, not individual tools.
 
 TOOL_CATEGORIES: Dict[str, Set[str]] = {
+    # Council Session 19 final cut — efficiency rule: one tool per function
     "passive_recon": {
-        "dig", "host", "whois", "curl", "theHarvester", "subfinder",
-        "amass", "crtsh", "dnsrecon", "fierce", "waybackurls",
-        "ghdb", "shodan", "censys", "wafw00f", "whatweb",
-        "dnsx", "httpx", "web_search",
+        "dig", "host", "whois", "curl", "subfinder",
+        "gau", "wafw00f", "whatweb",
+        "dnsx", "httpx", "web_search", "ping",
     },
     "active_scan": {
-        "nmap", "masscan", "rustscan", "naabu", "nikto",
-        "whatweb", "wpscan", "dirb", "gobuster", "ffuf",
-        "httpx", "dnsx",
+        "nmap", "masscan", "naabu", "gobuster", "ffuf",
+        "wpscan", "sslscan", "testssl", "enum4linux-ng",
+        "whatweb", "httpx", "dnsx", "ping",
     },
     "vuln_detection": {
-        "nmap", "nuclei", "searchsploit", "nikto",
-        "vulners", "wapiti", "wafw00f", "ssh-audit",
-        "sslscan", "testssl", "nmap-script",
+        "nmap", "nuclei", "searchsploit", "netexec",
+        "ssh-audit", "sslscan", "testssl",
     },
     "marksman": {
         "msfvenom", "msfconsole", "searchsploit", "curl", "sqlmap",
-        "nc", "ncat", "python3", "bash", "exploit",
+        "nc", "ncat", "netcat", "python3", "bash", "exploit",
         "git", "gdb", "strace", "objdump", "ROPgadget", "gcc", "docker",
+        "hydra", "john", "mimikatz", "evil-winrm", "impacket",
+        "responder", "bloodhound", "netexec", "socat",
     },
     "web_exploit": {
-        "sqlmap", "nikto", "nuclei", "curl", "python3",
+        "sqlmap", "nuclei", "curl", "python3",
         "ffuf", "wfuzz", "dalfox", "commix",
-        "gobuster", "whatweb", "nmap", "httpx",
+        "gobuster", "arjun", "httpx",
     },
     "privesc": {
-        "linpeas", "winpeas", "pspy", "find", "cat", "ls",
-        "python3", "bash", "ssh", "smbclient", "crackmapexec",
+        "linpeas", "winpeas", "pspy", "les", "find", "cat", "ls",
+        "python3", "bash", "ssh", "smbclient", "netexec",
         "impacket-secretsdump", "mimikatz",
     },
     "exfiltration": {
-        "curl", "wget", "nc", "python3", "bash", "tar", "gzip",
-        "scp", "rsync",
+        "curl", "wget", "nc", "netcat", "python3", "bash", "tar", "gzip",
+        "scp", "rsync", "mysqldump", "sqlite3", "certipy",
+        "impacket-secretsdump",
     },
     "none": set(),
 }

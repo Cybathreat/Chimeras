@@ -2,7 +2,7 @@
 Chimeras v2.0 — Lisa Agent
 
 Active scanning bot. Port scanning, service enum, OS detection.
-Scope: nmap, masscan, nikto, whatweb, gobuster, wpscan
+Scope: nmap, masscan, naabu, whatweb, gobuster, ffuf, wpscan, sslscan, testssl, enum4linux-ng
 
 v2 Phase 3: Lateral scan context.
   - When target_context is "lateral", Lisa scans internal targets

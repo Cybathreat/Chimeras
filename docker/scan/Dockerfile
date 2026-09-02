@@ -1,5 +1,5 @@
 # Chimeras v3.0 — Tier 2: Discovery Mid Image (Lisa, Bloodhound, Wasp)
-# ~400MB. Scanning + vuln detection + web exploitation. No exploit tools.
+# Scanning + vuln detection + web exploitation. No Metasploit (exploit tier only).
 FROM kalilinux/kali-rolling:latest AS gobuilder
 
 RUN apt-get update && apt-get install -y --no-install-recommends golang-go git ca-certificates && \
@@ -28,21 +28,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wpscan \
     sqlmap \
     commix \
-    nikto \
     exploitdb \
+    netexec \
     curl \
     whatweb \
     whois \
     dnsutils \
+    iputils-ping \
     python3 \
     python3-pip \
     jq \
     git \
     bash \
     ncat \
+    nftables \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --break-system-packages wafw00f ssh-audit wfuzz arjun || true
+# One pip package per RUN — a failure never cascades, and is VISIBLE at build time
+RUN pip3 install --break-system-packages wafw00f
+RUN pip3 install --break-system-packages ssh-audit
+RUN pip3 install --break-system-packages wfuzz
+RUN pip3 install --break-system-packages arjun
 
 COPY --from=gobuilder /out/bin/ /usr/local/bin/
 
@@ -50,7 +56,10 @@ RUN nuclei -update-templates 2>/dev/null || true
 
 # testssl.sh
 RUN git clone --depth 1 https://github.com/drwetter/testssl.sh.git /opt/testssl.sh && \
-    ln -s /opt/testssl.sh/testssl.sh /usr/local/bin/testssl.sh || true
+    ln -s /opt/testssl.sh/testssl.sh /usr/local/bin/testssl.sh
+
+COPY entrypoint.sh /usr/local/bin/chimeras-entrypoint.sh
+RUN chmod +x /usr/local/bin/chimeras-entrypoint.sh
 
 RUN useradd -m -s /bin/bash pentester && \
     echo "pentester ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers

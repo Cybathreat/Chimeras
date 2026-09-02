@@ -3,8 +3,8 @@ Chimeras v2.0 — Wasp Agent
 
 Web application vulnerability detection specialist. Runs in parallel
 with Bloodhound to cover web-layer vulnerabilities that Bloodhound misses.
-Scope: sqlmap, nikto, nuclei, curl, python3, ffuf, wfuzz, dalfox, commix,
-       gobuster, whatweb, nmap, httpx
+Scope: sqlmap, nuclei, curl, python3, ffuf, wfuzz, dalfox, commix,
+       gobuster, arjun, httpx
 
 Wasp is a DETECTION bot — it finds and proves web vulnerabilities exist
 but does not exploit them for shell access. It runs WITHOUT human approval
