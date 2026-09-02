@@ -64,6 +64,8 @@ class BaseBot(ABC):
         # v3.0: Tiered Docker sandbox — per-bot images, kernel scope enforcement, evidence chain
         self._enable_docker = self.state.get("enable_docker", False) or self.swarm_config.get("enable_docker", False)
         self.docker_executor: Optional[TieredDockerExecutor] = None
+        self.engagement_dir: Optional[Path] = None
+        self._resolve_engagement_dir()
         if self._enable_docker and _docker_available():
             # Parse scope IPs and domains for kernel-level enforcement
             scope_ips = mission_scope
@@ -83,8 +85,6 @@ class BaseBot(ABC):
             self._log(f"Docker sandbox enabled — tier={self.docker_executor.tier}, image={self.docker_executor.image}", "DOCKER")
         elif self._enable_docker and not _docker_available():
             self._log("Docker enabled in config but daemon not available — falling back to host execution", "WARN")
-        self.engagement_dir: Optional[Path] = None
-        self._resolve_engagement_dir()
 
         # v2.3: Telemetry, tool cache, critical findings buffer
         self.telemetry = Telemetry(self.engagement_dir)
