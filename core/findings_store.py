@@ -27,17 +27,28 @@ Usage:
 import json
 import fcntl
 import hashlib
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 
 class FindingsStore:
-    """Per-bot JSONL findings store. Lossless. File-locked writes.
+    """Per-bot JSONL findings store. Lossless. Thread-safe writes.
 
     Each bot writes to findings_{bot_name}.jsonl — no shared writes.
     Bookkeeper merges all files at report time.
+
+    Thread safety: bots run as in-process threads in LangGraph, so
+    fcntl (per-process) is insufficient. A module-level threading.Lock
+    guards every file append to prevent interleaved/corrupted JSONL lines.
+    fcntl is kept as defense-in-depth for cross-process safety.
     """
+
+    # Module-level lock — shared across all FindingsStore instances.
+    # Guards all file appends so concurrent in-process threads don't
+    # interleave partial JSONL lines.
+    _write_lock = threading.Lock()
 
     def __init__(self, engagement_dir: Optional[Path] = None):
         self.engagement_dir = Path(engagement_dir) if engagement_dir else Path("mission/engagement")
@@ -68,17 +79,19 @@ class FindingsStore:
         finding["source_bot"] = bot_name
         finding["timestamp"] = finding.get("timestamp", datetime.utcnow().isoformat())
 
-        # File-locked append
+        # Thread-safe append — threading.Lock is primary protection (in-process
+        # threads in LangGraph), fcntl is defense-in-depth for cross-process.
         path = self._bot_path(bot_name)
         path.parent.mkdir(parents=True, exist_ok=True)
 
         try:
-            with open(path, "a") as f:
-                try:
-                    fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-                except (OSError, ImportError):
-                    pass  # fcntl not available on all platforms
-                f.write(json.dumps(finding) + "\n")
+            with FindingsStore._write_lock:
+                with open(path, "a") as f:
+                    try:
+                        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                    except (OSError, ImportError):
+                        pass  # fcntl not available on all platforms
+                    f.write(json.dumps(finding) + "\n")
         except Exception as e:
             print(f"[FINDINGS_STORE] Failed to write finding for {bot_name}: {e}")
 
@@ -119,6 +132,16 @@ class FindingsStore:
         all_findings = self.get_all()
         return [f for f in all_findings if self._get_cvss(f) >= min_cvss]
 
+    def get_verified(self) -> List[Dict[str, Any]]:
+        """Get only findings that have been verified by a WarChief cycle.
+
+        Returns findings where ``verified_by_cycle`` is not None.
+        Bookkeeper can use this to generate verified-only reports that
+        exclude unconfirmed/unverified findings.
+        """
+        all_findings = self.get_all()
+        return [f for f in all_findings if f.get("verified_by_cycle") is not None]
+
     def _get_cvss(self, finding: Dict[str, Any]) -> float:
         """Extract CVSS score from finding, handling missing/invalid values."""
         cvss = finding.get("cvss")
@@ -139,9 +162,10 @@ class FindingsStore:
         merged_path = self._merged_path()
 
         try:
-            with open(merged_path, "w") as f:
-                for finding in all_findings:
-                    f.write(json.dumps(finding) + "\n")
+            with FindingsStore._write_lock:
+                with open(merged_path, "w") as f:
+                    for finding in all_findings:
+                        f.write(json.dumps(finding) + "\n")
         except Exception as e:
             print(f"[FINDINGS_STORE] Failed to merge findings: {e}")
 
@@ -209,9 +233,10 @@ class FindingsStore:
             for bot, findings in by_bot.items():
                 path = self._bot_path(bot)
                 try:
-                    with open(path, "w") as fp:
-                        for finding in findings:
-                            fp.write(json.dumps(finding) + "\n")
+                    with FindingsStore._write_lock:
+                        with open(path, "w") as fp:
+                            for finding in findings:
+                                fp.write(json.dumps(finding) + "\n")
                 except Exception as e:
                     print(f"[FINDINGS_STORE] Failed to rewrite {bot} findings: {e}")
 

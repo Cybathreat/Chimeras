@@ -15,6 +15,7 @@ import re
 
 from core.llm_router import LLMRouter
 from core.tool_executor import ToolExecutor
+from core.docker_executor import TieredDockerExecutor, _docker_available, build_images, IMAGE_NAMES
 from core.scope import ScopeEnforcer
 from core.state import SwarmState
 from core.json_parser import parse_llm_json
@@ -60,6 +61,28 @@ class BaseBot(ABC):
             internal_scope=internal_scope,
             roe=mission_roe,
         )
+        # v3.0: Tiered Docker sandbox — per-bot images, kernel scope enforcement, evidence chain
+        self._enable_docker = self.state.get("enable_docker", False) or self.swarm_config.get("enable_docker", False)
+        self.docker_executor: Optional[TieredDockerExecutor] = None
+        if self._enable_docker and _docker_available():
+            # Parse scope IPs and domains for kernel-level enforcement
+            scope_ips = mission_scope
+            scope_domains = ""
+            if mission_scope:
+                # Extract domains from scope (non-IP entries)
+                parts = [p.strip() for p in mission_scope.split(",")]
+                domains = [p for p in parts if not p.replace(".", "").isdigit() and "/" not in p]
+                scope_domains = ",".join(domains)
+            
+            self.docker_executor = TieredDockerExecutor(
+                bot_name=self.bot_name,
+                engagement_dir=str(self.engagement_dir) if self.engagement_dir else "/tmp/chimeras-engagement",
+                mission_scope=scope_ips,
+                mission_domains=scope_domains,
+            )
+            self._log(f"Docker sandbox enabled — tier={self.docker_executor.tier}, image={self.docker_executor.image}", "DOCKER")
+        elif self._enable_docker and not _docker_available():
+            self._log("Docker enabled in config but daemon not available — falling back to host execution", "WARN")
         self.engagement_dir: Optional[Path] = None
         self._resolve_engagement_dir()
 
@@ -147,6 +170,7 @@ class BaseBot(ABC):
         max_attempts = 3
         base_delay = 2.0
         last_error = None
+        truncated_at_least_once = False
 
         while attempt < max_attempts:
             attempt += 1
@@ -168,6 +192,7 @@ class BaseBot(ABC):
 
                 # v2.5: Truncation detection — if truncated, retry with reduced context
                 if "[NOTE: Response truncated" in result or "[NOTE: Response may have been truncated" in result:
+                    truncated_at_least_once = True
                     if attempt < max_attempts:
                         self._log(f"LLM response truncated (attempt {attempt}/{max_attempts}) — retrying with reduced context", "TRUNC")
                         # Strip raw tool output sections to reduce input size
@@ -179,11 +204,16 @@ class BaseBot(ABC):
                 # v2.3: Telemetry
                 duration = _time.monotonic() - start
                 # v2.4: Record with provider/model info
+                # v2.5: parse_ok=False if truncation was detected and never
+                # fully resolved — the response may be incomplete even after
+                # retries, so downstream JSON parsing may fail or use fallback.
                 provider_name = getattr(self.llm_router, 'provider_name', 'unknown')
                 model_name = getattr(self.llm_router, 'model', 'unknown')
+                still_truncated = ("[NOTE: Response truncated" in result
+                                   or "[NOTE: Response may have been truncated" in result)
                 self.telemetry.record_llm_call(
                     self.bot_name, provider_name, model_name,
-                    duration, parse_ok=True
+                    duration, parse_ok=not (truncated_at_least_once and still_truncated)
                 )
                 return result
             except (ValueError, TypeError, KeyError) as e:
@@ -395,7 +425,12 @@ class BaseBot(ABC):
             return cached
 
         self._log(f"EXEC: {command}", "EXEC")
-        result = self.executor.run(command, timeout=timeout)
+        # v3.0: Route through Docker sandbox if enabled, else host execution
+        if self.docker_executor is not None:
+            self._log(f"DOCKER EXEC: {command[:80]}", "DOCKER")
+            result = self.docker_executor.run(command, timeout=timeout)
+        else:
+            result = self.executor.run(command, timeout=timeout)
 
         # Save raw output to engagement folder
         raw_dir = self.engagement_dir / "raw"
@@ -604,7 +639,10 @@ class BaseBot(ABC):
         return self._cached_static_prompt
 
     def _build_static_system_prompt(self) -> str:
-        """Build the static part of the system prompt. Called once, cached after."""
+        """Build the static part of the system prompt. Called once, cached after.
+
+        v3.0: Tries Jinja2 template first, falls back to f-string if template unavailable.
+        """
         category = ScopeEnforcer.get_bot_category(self.bot_name)
         allowed_tools = sorted(ScopeEnforcer.get_allowed_tools(self.bot_name))
         installed = ScopeEnforcer._discover_installed_tools()
@@ -635,6 +673,25 @@ class BaseBot(ABC):
         soul_block = ""
         if self._soul:
             soul_block = f"## Your Soul\n\n{self._soul}\n\n---\n\n"
+
+        # v3.0: Try Jinja2 template rendering, fall back to f-string
+        try:
+            import jinja2
+            template_dir = Path(__file__).parent.parent / "templates"
+            if template_dir.exists():
+                env = jinja2.Environment(loader=jinja2.FileSystemLoader(str(template_dir)))
+                template = env.get_template("base_prompt.j2")
+                return template.render(
+                    soul=self._soul or "",
+                    bot_name=self.bot_name,
+                    role_description=self.role_description,
+                    scope_description=self.scope_description,
+                    tool_category=category,
+                    available_tools=available_str,
+                    hint=hint,
+                )
+        except Exception:
+            pass  # Fall through to f-string
 
         return f"""{soul_block}You are {self.bot_name}, {self.role_description}.
 Scope: {self.scope_description}
@@ -703,6 +760,12 @@ Respond ONLY with JSON:
             #   - WarChief (if this IS WarChief) produces a default "report" route
             self._log(f"LLM response unparseable: {e} — using safe fallback", "ERROR")
             self._append_log("WARNING: LLM response unparseable. Using safe fallback (conservative skip).")
+            # v2.5: Record parse failure in telemetry so it shows up in
+            # parse_failure_rate — previously this was invisible.
+            self.telemetry.record_tool_exec(
+                self.bot_name, "llm_parse", "",
+                0.0, exit_code=-1, parse_ok=False,
+            )
             self._write_bot_file(
                 f"# {self.bot_name.upper()} — SAFE FALLBACK\n\n"
                 "LLM response could not be parsed.\n"
@@ -853,6 +916,11 @@ No other text. Just the JSON."""""
             analysis = self._parse_json_response(analysis_response)
         except Exception as e:
             self._log(f"LLM analysis failed: {e}", "ERROR")
+            # v2.5: Record parse failure in telemetry.
+            self.telemetry.record_tool_exec(
+                self.bot_name, "llm_analysis_parse", "",
+                0.0, exit_code=-1, parse_ok=False,
+            )
             analysis = {
                 "summary": f"Tool execution completed but LLM analysis failed: {e}",
                 "findings": [],

@@ -156,8 +156,9 @@ def _repair_truncated_json(text: str) -> Optional[Dict[str, Any]]:
 
     When LLM output is cut off mid-JSON, we try to salvage what we have by:
     1. Finding the last complete key-value pair
-    2. Closing any open arrays and objects
-    3. Parsing the repaired string
+    2. Closing any open strings
+    3. Closing any open arrays and objects
+    4. Parsing the repaired string
 
     This is a last resort — better to have partial findings than none.
     """
@@ -173,10 +174,17 @@ def _repair_truncated_json(text: str) -> Optional[Dict[str, Any]]:
         return None  # Not truncated, don't repair
 
     # Strip incomplete trailing content — find last complete value
-    # Remove trailing incomplete string (no closing quote)
     repaired = text.rstrip()
     if repaired.endswith(","):
         repaired = repaired[:-1]
+
+    # Check for an unterminated string — if there's an odd number of
+    # double quotes, the last string is open and needs to be closed.
+    quote_count = repaired.count('"')
+    if quote_count % 2 != 0:
+        # The last string is unterminated — close it
+        repaired += '"'
+
     # Remove trailing incomplete content after last comma
     last_comma = repaired.rfind(",")
     last_colon = repaired.rfind(":")

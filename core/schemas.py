@@ -16,6 +16,7 @@ Usage:
 
 from typing import Dict, Any, Optional, List
 from datetime import datetime
+import json
 
 try:
     from pydantic import BaseModel as _BaseModel, Field, ValidationError
@@ -199,6 +200,8 @@ def validate_bot_output(data: Dict[str, Any], schema_class) -> Dict[str, Any]:
     Returns validated dict. If validation fails, returns raw data with
     a warning logged. Never crashes — bad data is better than no data.
     """
+    if schema_class is None:
+        return data
     if not PYDANTIC_AVAILABLE:
         return data
     try:

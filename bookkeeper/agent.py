@@ -24,6 +24,7 @@ from core.base_bot import BaseBot
 from core.state import SwarmState
 from core.report_template import render_report
 from core.findings_store import FindingsStore
+from core.sarif_exporter import write_sarif
 
 
 class Bookkeeper(BaseBot):
@@ -251,6 +252,15 @@ Respond with the complete report as markdown. Do NOT wrap in JSON. Do NOT wrap i
                 )
 
                 self._write_report("structured_report.md", structured_report)
+
+                # v3.0: SARIF 2.1.0 export for GitHub code-scanning / SOAR integration
+                try:
+                    all_findings = self.findings_store.get_all()
+                    sarif_path = self.engagement_dir / "report" / "findings.sarif"
+                    write_sarif(all_findings, sarif_path)
+                    self._log(f"SARIF exported: {len(all_findings)} findings → {sarif_path.name}", "SARIF")
+                except Exception as e:
+                    self._log(f"SARIF export failed: {e}", "ERROR")
                 self._log(f"Structured report generated: {len(structured_findings)} findings, "
                           f"{len(critical_findings)} critical", "REPORT")
             except Exception as e:

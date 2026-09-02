@@ -1,124 +1,125 @@
-# Chimeras — Changelog
+# Chimeras v3.0 — Changelog
 
 All notable changes to Chimeras. Dates in Paris time (CEST/UTC+2).
+
+## v3.0 — 2026-09-02
+
+### Added — Docker Sandboxing
+- **DockerToolExecutor** (`core/docker_executor.py`) — executes all Kali tools inside disposable Docker containers. Read-only rootfs, memory/CPU/PID limits, cap-drop ALL + NET_RAW/NET_ADMIN. Zero host execution when enabled.
+- **Kali Docker image** (`docker/Dockerfile`) — minimal Kali Linux with 30+ pentest tools (nmap, nuclei, sqlmap, gobuster, nikto, ffuf, whatweb, wafw00f, sslscan, ssh-audit, commix, wfuzz, httpx, dnsx, subfinder, naabu, wapiti, exploitdb, linpeas, dalfox, etc.)
+- **ENABLE_DOCKER config flag** — `enable_docker` in swarm-config.json, `--docker` CLI flag. Graceful fallback to host execution when Docker daemon unavailable.
+- **Defense in depth** — Python 3-tier scope enforcement runs BEFORE Docker call. Container isolation is second gate, not only gate.
+
+### Added — SARIF 2.1.0 Export
+- **SARIF exporter** (`core/sarif_exporter.py`) — GitHub code-scanning compatible output. Maps Pydantic Finding model to SARIF result objects. CWE/CVE rule IDs, security-severity scoring, logicalLocations for endpoint findings, fixes from remediation field.
+- **Bookkeeper integration** — `findings.sarif` generated alongside `structured_report.md` and `final_report.md` at report time.
+
+### Added — Web Search
+- **Web search tool** (`core/web_search.py`) — Tavily API (primary, free tier 1000/month) with DuckDuckGo HTML fallback. `web_search()`, `search_cve()`, `search_exploit()` functions.
+- **Scope integration** — `web_search` added to `passive_recon` tool category. ARIA and Marksman can use it.
+
+### Added — Budget Management
+- **BudgetTracker** (`core/budget.py`) — per-bot, per-phase USD cost tracking. Configurable cap via `budget_usd` in swarm-config.json. Warning at 80%, hard stop at 100%. Cost estimates for 10+ provider/model combinations. Ollama/cloud providers = $0.
+- **Config integration** — `budget_usd` in DEFAULT_SWARM_CONFIG.
+
+### Added — Jinja2 Prompt Templates
+- **Template system** (`templates/base_prompt.j2`) — system prompt rendered via Jinja2. Falls back to f-string if Jinja2 or template unavailable. Enables prompt tuning without code changes.
+
+### Added — Test Suite
+- **210 pytest tests** — `tests/test_scope.py` (TargetValidator, ScopeEnforcer, shell injection, destructive blocklist, DoS detection), `tests/test_graph.py` (routing, loop limits, stuck detection, force-complete-cycle), `tests/test_schemas.py` (Pydantic models), `tests/test_json_parser.py` (fence stripping, truncation repair), `tests/test_findings_telemetry.py` (thread safety, telemetry).
+- **Test fixtures** — `tests/conftest.py` with temporary engagement dirs, mock state.
+
+### Added — CI/CD
+- **GitHub Actions** (`.github/workflows/ci.yml`) — ruff lint + pytest on push. Python 3.11 + 3.12 matrix.
+
+### Fixed — P0 Issues (Council Session 7)
+- **Thread-safe JSONL writes** — `findings_store.py` now uses `threading.Lock` around all file appends. fcntl kept as cross-process defense in depth. Prevents interleaved writes when Bloodhound+Wasp run in parallel.
+- **Telemetry truncation as failure** — `record_tool_exec()` now has `parse_ok` parameter. Truncation/fallback counted as parse failure in telemetry summary. Callers in `base_bot.py` pass `parse_ok=False` on truncation.
+- **Verification filtering** — `findings_store.py` has `get_verified()` method returning only findings where `verified_by_cycle is not None`. Bookkeeper can generate verified-only reports.
+
+### Changed
+- `core/base_bot.py` — imports DockerToolExecutor, routes `_run_tool` through Docker when enabled. Jinja2 template rendering in `_build_static_system_prompt`. `parse_ok=False` on LLM truncation passed to telemetry.
+- `core/config.py` — `enable_docker` and `budget_usd` in DEFAULT_SWARM_CONFIG.
+- `core/scope.py` — `web_search` added to `passive_recon` category.
+- `bookkeeper/agent.py` — SARIF export after structured report generation.
+- `main.py` — `--docker` CLI flag, `enable_docker` in state initialization.
+
+### Preserved (Do Not Touch)
+- 3-tier scope enforcement (code-level, fail-closed)
+- Fixed phase graph with human gates (exploitation + lateral movement)
+- Professional pentest report format (Scope→Exec Summary→Findings→Remediation)
+- WarChief adaptive routing (12 decisions, 11-state machine)
+- Soul system (9 souls, 3,018 lines total)
+- Force-complete-cycle logic
+- Per-bot JSONL findings store (lossless)
+- Artifact tracking + cleanup
+- Ollama native support
+- JSON checkpoint/resume system
+
+---
+
+## v2.5 — 2026-08-24
+
+### Added
+- **Marksman bot** — merged Pathologist (research) + Surgeon (execution) into single bot. No feedback loop. Human gate enforced.
+- **Graph state checkpointing** — `core/checkpoint.py` saves state after every node. `--resume` restores full state.
+- **14 bug fixes from live testing** — see CLAUDE.md for full list.
+
+### Changed
+- `core/scope.py` — merged `payload_fab` + `exploitation` into `marksman` category. `web_exploit` added to SHELL_CAPABLE_CATEGORIES.
+- `graph.py` — merged pathologist+surgeon nodes into marksman_node. Force-complete-cycle in `_unified_router`.
+
+---
 
 ## v2.4 — 2026-08-22
 
 ### Added
-- **Pydantic schema models** (`core/schemas.py`) — `Finding`, `ToolResult`, `BotDecision`, `BotAnalysis` with validation. Fallback when Pydantic not installed. `compute_content_hash()` utility. (088660b)
-- **Lossless findings store** (`core/findings_store.py`) — per-bot JSONL files. File-locked writes. `merge_all()`, `get_critical()`, `format_for_report()`, `deduplicate()`. Evidence never truncated. (088660b)
-- **Telemetry expansion** — `record_llm_call()` with provider/model metrics, `record_tool_exec()` with structured tool metrics, `summary()` for baseline comparison (cache hit rate, parse failure rate, per-provider latency). (8d4e5e4)
-- **Verification cache** — WarChief skips re-verification when tool output `content_hash` unchanged. `_mark_verified()`, `_is_verified()` in BaseBot. Feature-flagged (default off). (b9feb68)
-- **Parallel dispatch utility** — `dispatch_parallel()` in graph.py generalizes Bloodhound+Wasp parallelism. `can_parallelize()` checks `BOT_DEPENDENCIES` map. `PARALLEL_CAPABLE` and `SEQUENTIAL_ONLY` sets. (ab656df)
-- **Structured report** — Bookkeeper generates `structured_report.md` from FindingsStore via `render_report()` template. Audit JSON includes `findings_total`, `findings_critical`, `findings_by_bot`. (eda6c2e)
-- **WarChief soul: team knowledge** — all 9 specialists documented with roles, tool categories, boundaries, expected output, re-dispatch triggers, dependency map, parallel dispatch instructions. (f9ba2b5)
-- **Verification metadata on tool results** — `content_hash`, `tool_name`, `target`, `verified_by_cycle` added to every tool execution result. (088660b)
-- **Analysis prompt upgrade** — bots now asked to output `structured_findings` with full schema (finding_id, severity, cvss, host, port, service, status, description, risks, attack_vectors, poc, proof_of_existence, remediation). (088660b)
-
-### Changed
-- **base_bot.py** — imports schemas, FindingsStore, compute_content_hash. `_parse_json_response()` accepts optional schema for validation. Tool results carry verification metadata. Analysis output saves structured findings to JSONL and feeds critical findings to critical_buffer.
-- **warchief/agent.py** — `_update_state()` marks tool results as verified after each decision cycle (when feature-flag enabled).
-- **bookkeeper/agent.py** — imports `render_report` and `FindingsStore`. Generates structured report alongside LLM narrative. Merges per-bot JSONL findings. Audit JSON includes findings summary.
-- **graph.py** — `bloodhound_node` refactored to use `dispatch_parallel([Bloodhound, Wasp])` instead of inline asyncio.gather. Added `BOT_DEPENDENCIES`, `can_parallelize()`, `dispatch_parallel()`.
-- **telemetry.py** — LLM calls now record `provider_name` and `model` via `record_llm_call()` instead of generic `record()`.
-
-### Live Tested
-- Full engagement against cyberian-defenses.com: 6 min, 285 tool executions, 11 LLM calls, 7 cache hits, 0 parse failures, 23 structured findings, 3 WarChief decisions. Structured report and audit JSON generated successfully.
+- Pydantic schema models (Finding, ToolResult, BotDecision, BotAnalysis)
+- Lossless per-bot JSONL findings store
+- Telemetry with per-provider LLM latency
+- Verification cache (content hash-based)
+- Parallel dispatch utility
+- Structured report generation
 
 ---
 
 ## v2.3 — 2026-08-18
 
 ### Added
-- **Hardened JSON parser** (`core/json_parser.py`) — strips markdown fences, brace matching, truncation detection, optional Pydantic validation. Replaces inline `_parse_json_response` in base_bot.py.
-- **Telemetry logger** (`core/telemetry.py`) — JSONL telemetry for every LLM call and tool execution. Context manager for timing blocks.
-- **Tool result cache** (`core/tool_cache.py`) — file-based cache keyed by (scope_version, tool, target, args). Scope-invalidated. WarChief can force-invalidate.
-- **Critical findings buffer** (`core/critical_buffer.py`) — append-only buffer for CVSS >= 7.0 findings. Never truncated. Read first by WarChief and Bookkeeper.
-- **Report template** (`core/report_template.py`) — Jinja2 template with schema validation. Fallback f-string renderer. Full pentest report structure.
-- **ROE prompt cache** (`core/roe_cache.py`) — caches WarChief's system prompt ROE block. Delta injection for scope changes.
-- **Depth matrix** (`core/depth_matrix.py`) — pentest depth assessment categories for WarChief's quality checks.
-- **Compliance brief** (`core/compliance_brief.py`) — compliance brief builder for WarChief's ROE enforcement.
-- **WarChief compliance officer** — `forbidden_commands`, `depth_gap_carryforward`, `scope_version` fields in state. WarChief enforces RoE, checks scope expansion, invalidates cache on scope change.
-- **18 bug fixes from Council code review** — P0 security + P1 integrity + P2 performance. (6ad4b27)
-- **Council-rewritten souls** — ARIA, Lisa, Bloodhound soul.md files rewritten through multi-LLM council debate. Embedded real pentest domain expertise.
-
-### Changed
-- **base_bot.py** — imports json_parser, telemetry, tool_cache, critical_buffer. Tool cache check before execution. Telemetry on every LLM call and tool exec. Sanitize tool output for prompt injection. Static system prompt caching.
-- **warchief/agent.py** — imports compliance_brief, roe_cache, depth_matrix. ROE cache for system prompt. Delta context injection. Depth assessment per finding. Scope version tracking.
-
----
-
-### Added
-- **Destructive/DoS command blocklist** — code-level enforcement of Rules of Engagement. `rm -rf`, `mkfs`, `dd of=/dev/`, fork bombs, `DROP TABLE`, `TRUNCATE TABLE`, `shutdown/reboot/halt`, Windows `format`, and flood-rate scan flags (nmap `--max-rate >=100000`, hping3 `--flood`, slowloris, goldeneye) are blocked before execution, independent of tool category. Hard destructive patterns always blocked; DoS-capable flags blocked when RoE restricts DoS or when no RoE is supplied (fail safe). `DestructiveCommandViolation` exception class added to `core/scope.py`.
-- **Gate decision logging** — every exploitation and lateral-movement gate decision (approved, denied, auto-approved, errored) is now written to `engagement/log.md` with timestamp, gate name, mode, and detail. The decision to bypass human review via `--approve` is now part of the permanent mission record, not just terminal scrollback. `_log_gate_decision()` function added to `graph.py`.
-- **RoE parameter** propagated through the full enforcement chain: `ScopeEnforcer.check()`, `ScopeEnforcer.enforce()`, `ToolExecutor.__init__()`, `BaseBot._execute_tool()`.
-
-### Changed
-- **Scope enforcement order** — now 4 checks instead of 3: destructive/DoS → shell injection → tool category → target/CIDR. Destructive check runs first because it's category-independent.
-- **README** — two new design principles documented (destructive command blocking, gate decision logging).
+- Hardened JSON parser with truncation repair
+- Telemetry logger
+- Tool result cache (scope-invalidated)
+- Critical findings buffer (CVSS >= 7.0)
+- Report template (Jinja2)
+- ROE prompt cache
+- Depth matrix and compliance brief
+- Destructive/DoS command blocklist
+- Gate decision logging
 
 ---
 
 ## v2.1 — 2026-07-30
 
 ### Added
-- **Wasp bot** — web application pentesting specialist. Detects XSS, CSRF, SQLi, SSTI, SSRF, LFI/RFI, IDOR, auth bypass. Runs in parallel with Bloodhound during vuln detection phase. (b16e6f6)
-- **`vuln_detection` routing decision** — WarChief now explicitly routes to Bloodhound+Wasp before considering exploitation. (ec5e47a)
-- **Scope expansion gate** — when out-of-scope targets are discovered, operator decides whether to expand scope. (d55fcee)
-- **Soul.md system** — bot identity externalized from code into per-bot `soul.md` files. (b5b6060)
-- **Wiki documentation** updated for Wasp integration and v2 architecture. (fb5494c)
-
-### Changed
-- **Wasp refactored** from exploitation to detection-only role. Runs parallel with Bloodhound, no human approval needed for detection. (08d7a65)
-- **WarChief soul** updated — always runs Bloodhound before reporting, no premature abort. (5aca901)
-- **Bot count**: 9 → 10 bots (Wasp added).
-
-### Fixed
-- **asyncio.gather parallel execution** — `bot.run()` is async but has no await points (all blocking LLM/subprocess calls). `asyncio.gather` alone ran them sequentially — Bloodhound blocked, Wasp never started. Fix: wrap each `bot.run()` in `asyncio.to_thread(lambda: asyncio.run(bot.run()))` for true OS-thread parallelism. Added `return_exceptions=True` and per-bot error logging with traceback to prevent silent Wasp failures. (e5c222e)
-- **Router using `mission.phase` instead of `last_bot`** — Bloodhound was silently skipped because router checked phase state instead of which bot last ran. (d6c58b4)
-- **NO PROGRESS guard false positive** — scope parsing didn't handle space-separated targets. (b6f1ae6)
-- **Scope parsing and scope exhaustion** root causes fixed. (bcbf7c8)
-- **3 bugs from first real engagement** (raksha.tn) — scope parsing, target validation, routing edge cases. (19b7a30)
-- **WarChief always runs Bloodhound** before reporting — prevents premature abort on first scan cycle. (5aca901)
-- **Force advance after 2 scan cycles** — prevents infinite scan loops. (ec5e47a)
-
-### Removed
-- **`mission/` directory** removed from git tracking — mission data is per-operation, not version-controlled. (87c1b1d)
+- Wasp bot (web application pentesting specialist)
+- Scope expansion gate
+- Soul.md system
+- Lateral movement and pivoting
 
 ---
 
 ## v2.0 — 2026-07-21
 
 ### Added
-- **Adaptive graph rewiring** — WarChief is now a decision router that re-enters after each phase. 11 routing decisions, 11-state mission state machine. (c5d9340, b46f668, e14516e)
-- **Lateral movement & pivoting** — internal recon, lateral scan, lateral exploitation. Second human approval gate. (a424aa4)
-- **Failure handling & resilience** — WAF/IPS detection, failed vector tracking, graceful abort (3+ failed exploits or 3 same decisions). (a0d4b1c)
-- **Cleanup/rollback** — artifact tracking, removal attempted, failures flagged in report. (6406898)
-- **Decision audit trail** — all WarChief routing decisions logged in report + `warchief_decisions.json`. (6406898)
-- **Context truncation** — rolling digest of last N entries, not full file re-reads. (e14516e)
-- **Config auto-migration** — v1 `swarm-config.json` auto-migrated to v2 on load. (e14516e)
-- **TUI pre-flight wizard** — Rich-based, 3-step: config check, LLM connectivity for all bots, summary. `--skip-wizard` to bypass. (b3236d1)
-- **Hard scope enforcement** — `TargetValidator` resolves IPs/hostnames, checks against CIDR scope. Shell metacharacter injection blocked for non-shell categories. (cb6c0ba)
-- **`.gitignore`** — Python, venv, IDE, mission data, secrets, logs. (37ad9d9)
-
-### Changed
-- **All v1.0 docstrings → v2.0**. (ad62bf8)
-- **All MD files and wiki rewritten** for v2.0. (c4b8c0a)
-- **Project renamed** to Chimeras — all references updated. (7e231a3)
-
-### Fixed
-- **Zero pyflakes warnings** — full code cleanup. (ad62bf8)
+- Adaptive graph rewiring (WarChief as decision router)
+- 11-state mission state machine
+- Hard scope enforcement (TargetValidator)
+- TUI pre-flight wizard
+- Config auto-migration
 
 ---
 
 ## v1.0 — 2026-07-17
 
 ### Added
-- Initial release. 9 bots: WarChief, ARIA, Lisa, Bloodhound, Pathologist, Surgeon, Magician, Thief, Bookkeeper.
-- LangGraph-based multi-agent orchestration.
-- Provider-agnostic LLM routing (6 providers + custom base_url).
-- Category-based tool scoping with dynamic discovery.
-- File-based bot communication via engagement files.
-- Bookkeeper: full context + raw tool output for PoC/Proof of Existence sections. (e5b9436)
-- Scope system, tool executor, base bot architecture. (7e231a3)
-- Chimeras v2 development roadmap. (9de35e5)
+- Initial release. 9 bots, LangGraph orchestration, provider-agnostic LLM routing.

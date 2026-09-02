@@ -149,6 +149,8 @@ async def run_operation(mission_dir: Path, swarm_config: dict, auto_approve: boo
         # v2.1: Scope expansion
         scope_expansion_candidates=[],
         approved_extra_targets=[],
+        # v3.0: Docker sandboxing
+        enable_docker=swarm_config.get("enable_docker", False),
     )
 
     # v2.5: Override with saved state if resuming from checkpoint
@@ -224,6 +226,7 @@ Examples:
     run_parser.add_argument("--mission-dir", "-d", default="mission", help="Mission directory")
     run_parser.add_argument("--config", "-c", help="Custom swarm-config.json")
     run_parser.add_argument("--approve", action="store_true", help="Auto-approve exploitation + lateral gates")
+    run_parser.add_argument("--docker", action="store_true", help="Enable Docker sandboxing for tool execution (v3.0)")
     run_parser.add_argument("--resume", action="store_true",
                             help="Resume from existing engagement files (skip cleanup)")
     run_parser.add_argument("--skip-wizard", action="store_true",
@@ -267,6 +270,8 @@ Examples:
                 return
             swarm_config = verified_config
 
+        if args.docker:
+            swarm_config["enable_docker"] = True
         asyncio.run(run_operation(mission_dir, swarm_config, args.approve, args.resume))
 
     elif args.command == "status":

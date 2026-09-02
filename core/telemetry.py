@@ -106,8 +106,16 @@ class Telemetry:
 
     def record_tool_exec(self, bot_name: str, tool_name: str, target: str,
                          duration_sec: float, exit_code: int = 0,
-                         cached: bool = False, scope_blocked: bool = False):
-        """v2.4: Record a tool execution with structured metrics."""
+                         cached: bool = False, scope_blocked: bool = False,
+                         parse_ok: bool = True):
+        """v2.4: Record a tool execution with structured metrics.
+
+        v2.5: ``parse_ok`` parameter — when False, counts as a parse failure
+        in the telemetry summary. Callers should pass False when the tool
+        output was truncated or a fallback parser was used, so the
+        parse_failure_rate metric reflects real data-loss events and not
+        just LLM call failures.
+        """
         if not self.enabled:
             return
         try:
@@ -117,12 +125,13 @@ class Telemetry:
                 "action": "tool_exec",
                 "phase": "",
                 "duration_sec": round(duration_sec, 3),
-                "success": exit_code == 0 and not scope_blocked,
+                "success": exit_code == 0 and not scope_blocked and parse_ok,
                 "tool": tool_name,
                 "target": target,
                 "exit_code": exit_code,
                 "cached": cached,
                 "scope_blocked": scope_blocked,
+                "parse_ok": parse_ok,
             }
 
             self._log_path().parent.mkdir(parents=True, exist_ok=True)
@@ -162,10 +171,15 @@ class Telemetry:
         cache_hits = sum(1 for e in tool_execs if e.get("cached", False))
         cache_hit_rate = round(cache_hits / tool_count, 3) if tool_count > 0 else 0
 
-        # Parse failure rate
+        # Parse failure rate — count from both LLM calls and tool execs.
+        # v2.5: tool_exec parse_ok=False indicates tool output was truncated
+        # or a fallback parser was used — this is a real data-loss event.
         llm_count = len(llm_calls)
         parse_failures = sum(1 for e in llm_calls if not e.get("parse_ok", True))
-        parse_failure_rate = round(parse_failures / llm_count, 3) if llm_count > 0 else 0
+        tool_parse_failures = sum(1 for e in tool_execs if not e.get("parse_ok", True))
+        parse_failures += tool_parse_failures
+        total_parse_attempts = llm_count + tool_count
+        parse_failure_rate = round(parse_failures / total_parse_attempts, 3) if total_parse_attempts > 0 else 0
 
         return {
             "total_events": len(events),

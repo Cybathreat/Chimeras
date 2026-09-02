@@ -39,6 +39,10 @@ DEFAULT_SWARM_CONFIG = {
     # v2 fields
     "max_loops_per_phase": 5,
     "default_aggressiveness": "cautious",
+    # v3.0: Docker sandboxing
+    "enable_docker": False,
+    # v3.0: Budget management (USD cap per engagement, None = unlimited)
+    "budget_usd": None,
 }
 
 # Engagement folder structure

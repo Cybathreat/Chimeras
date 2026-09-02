@@ -34,7 +34,7 @@ TOOL_CATEGORIES: Dict[str, Set[str]] = {
         "dig", "host", "whois", "curl", "theHarvester", "subfinder",
         "amass", "crtsh", "dnsrecon", "fierce", "waybackurls",
         "ghdb", "shodan", "censys", "wafw00f", "whatweb",
-        "dnsx", "httpx",
+        "dnsx", "httpx", "web_search",
     },
     "active_scan": {
         "nmap", "masscan", "rustscan", "naabu", "nikto",
@@ -301,8 +301,13 @@ class TargetValidator:
         re.compile(r'\.(txt|log|json|xml|html|md|py|sh|conf|cfg)$'),
         # nmap script-args values (e.g., ssl-cert.timeout=30, vulners.timeout=60)
         re.compile(r'^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+=[a-zA-Z0-9._-]+$'),
-        # nmap script names (e.g., ssl-cert, ssl-enum-ciphers, vulners)
-        re.compile(r'^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$'),
+        # nmap script names with hyphens (e.g., ssl-cert, ssl-enum-ciphers, vulners)
+        # These contain hyphens which real hostnames rarely use as the sole separator.
+        # Match only dot-separated names where a segment contains a hyphen
+        # (e.g., ssl-cert.timeout, but NOT evil.com)
+        re.compile(r'^[a-zA-Z0-9_-]+-[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+-[a-zA-Z0-9_-]+$'),
+        re.compile(r'^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+-[a-zA-Z0-9_-]+$'),
+        re.compile(r'^[a-zA-Z0-9_-]+-[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$'),
         # Common nmap timing/template flags
         re.compile(r'^T[0-9]$'),
         # Version strings, output formats
