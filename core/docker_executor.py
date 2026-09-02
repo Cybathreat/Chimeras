@@ -274,7 +274,16 @@ class TieredDockerExecutor:
         if self._container_name and self._container_running(self._container_name):
             return self._container_name
         
-        container_name = f"chimeras-{self.bot_name}-{uuid.uuid4().hex[:8]}"
+        # v3.0 fix: ORPHAN PREVENTION — one container per bot. If a previous
+        # run/re-dispatch left a container with our deterministic name alive,
+        # adopt it instead of spawning another (each re-dispatch would leak).
+        canonical_name = f"chimeras-{self.bot_name}-{self._engagement_tag()}"
+        if self._container_running(canonical_name):
+            logger.info(f"[{self.bot_name}] Adopting existing container: {canonical_name}")
+            self._container_name = canonical_name
+            return canonical_name
+        
+        container_name = canonical_name
         
         # Build docker run command with per-bot configuration
         cmd = [
@@ -379,6 +388,11 @@ class TieredDockerExecutor:
         except Exception as e:
             logger.error(f"Container start error: {e}")
             raise
+    
+    def _engagement_tag(self) -> str:
+        """Deterministic short tag from the engagement path — same engagement,
+        same container name, so re-dispatches adopt instead of orphaning."""
+        return hashlib.sha256(self.engagement_dir.encode()).hexdigest()[:8]
     
     def _container_running(self, name: str) -> bool:
         """Check if a container is running."""

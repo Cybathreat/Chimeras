@@ -313,3 +313,478 @@ cyberian-defenses.com.	60	IN	SOA	ns1.systemdns.com. hostmaster.systemdns.com. 17
 
 - BLOCKED: TARGET OUT OF SCOPE: IP 76.13.46.223 is not within mission scope (cyberian-defenses.com, cyberian-defenses.com)
 
+### Command: curl -s "https://crt.sh/?q=cyberian-defenses.com&output=json"
+- Exit Code: 28
+- Duration: 135.59s
+- Success: False
+
+```
+
+```
+
+### Command: curl -s "https://api.certspotter.com/v1/issuances?domain=cyberian-defenses.com&include_subdomains=true"
+- Exit Code: 137
+- Duration: 108.52s
+- Success: False
+
+```
+
+```
+
+### Command: host www.cyberian-defenses.com
+- Exit Code: 0
+- Duration: 0.77s
+- Success: True
+
+```
+www.cyberian-defenses.com has address 76.13.46.223
+
+```
+
+### Command: host mail.cyberian-defenses.com
+- Exit Code: 0
+- Duration: 0.82s
+- Success: True
+
+```
+mail.cyberian-defenses.com is an alias for business.zoho.com.
+business.zoho.com has address 204.141.42.199
+
+```
+
+### Command: host api.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.3s
+- Success: False
+
+```
+Host api.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host dev.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.28s
+- Success: False
+
+```
+Host dev.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host staging.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.29s
+- Success: False
+
+```
+Host staging.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host admin.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.28s
+- Success: False
+
+```
+Host admin.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host vpn.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.29s
+- Success: False
+
+```
+Host vpn.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host git.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.31s
+- Success: False
+
+```
+Host git.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host portal.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.28s
+- Success: False
+
+```
+Host portal.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host app.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.28s
+- Success: False
+
+```
+Host app.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host test.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.38s
+- Success: False
+
+```
+Host test.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host blog.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.28s
+- Success: False
+
+```
+Host blog.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host remote.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.28s
+- Success: False
+
+```
+Host remote.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host dashboard.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.27s
+- Success: False
+
+```
+Host dashboard.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host support.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.31s
+- Success: False
+
+```
+Host support.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host intranet.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.3s
+- Success: False
+
+```
+Host intranet.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host secure.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.27s
+- Success: False
+
+```
+Host secure.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host cdn.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.28s
+- Success: False
+
+```
+Host cdn.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host jenkins.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.29s
+- Success: False
+
+```
+Host jenkins.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host confluence.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.26s
+- Success: False
+
+```
+Host confluence.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host jira.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.27s
+- Success: False
+
+```
+Host jira.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host gitlab.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.24s
+- Success: False
+
+```
+Host gitlab.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host corp.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.26s
+- Success: False
+
+```
+Host corp.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host shop.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.27s
+- Success: False
+
+```
+Host shop.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host old.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.28s
+- Success: False
+
+```
+Host old.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host backup.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.28s
+- Success: False
+
+```
+Host backup.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host ns1.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.44s
+- Success: False
+
+```
+Host ns1.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: host ns2.cyberian-defenses.com
+- Exit Code: 1
+- Duration: 0.42s
+- Success: False
+
+```
+Host ns2.cyberian-defenses.com not found: 3(NXDOMAIN)
+
+```
+
+### Command: curl -sI https://cyberian-defenses.com
+- Exit Code: 0
+- Duration: 0.33s
+- Success: True
+
+```
+HTTP/1.1 200 OK
+Server: nginx/1.24.0 (Ubuntu)
+Date: Wed, 02 Sep 2026 21:48:11 GMT
+Content-Type: text/html
+Content-Length: 18860
+Last-Modified: Mon, 24 Aug 2026 05:34:19 GMT
+Connection: keep-alive
+Vary: Accept-Encoding
+ETag: "6a8bd7db-49ac"
+Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+X-Content-Type-Options: nosniff
+X-Frame-Options: SAMEORIGIN
+X-XSS-Protection: 1; mode=block
+Referrer-Policy: strict-origin-when-cross-origin
+Permissions-Policy: camera=(), microphone=(), g
+```
+
+### Command: curl -sI http://cyberian-defenses.com
+- Exit Code: 0
+- Duration: 0.14s
+- Success: True
+
+```
+HTTP/1.1 301 Moved Permanently
+Server: nginx/1.24.0 (Ubuntu)
+Date: Wed, 02 Sep 2026 21:48:11 GMT
+Content-Type: text/html
+Content-Length: 178
+Connection: keep-alive
+Location: https://cyberian-defenses.com/
+
+
+```
+
+### Command: whatweb https://cyberian-defenses.com
+- Exit Code: 0
+- Duration: 8.25s
+- Success: True
+
+```
+[1m[34mhttps://cyberian-defenses.com/[0m [200 OK] [1mCountry[0m[[0m[22mUNITED STATES[0m][[1m[31mUS[0m], [1mEmail[0m[[0m[22mahmed.chiboub@cyberian-defenses.com[0m], [1mHTML5[0m, [1mHTTPServer[0m[[1m[31mUbuntu Linux[0m][[1m[36mnginx/1.24.0 (Ubuntu)[0m], [1mIP[0m[[0m[22m76.13.46.223[0m], [1mMeta-Author[0m[[0m[22mAhmed Chiboub[0m], [1mOpen-Graph-Protocol[0m[[1m[32mwebsite[0m], [1mScript[0m[[0m[22mapplication/ld+json[0m], [1mStrict-Transport-Security[0m
+```
+
+### Command: curl -s https://cyberian-defenses.com
+- Exit Code: 0
+- Duration: 0.17s
+- Success: True
+
+```
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cyberian Defenses | Cybersecurity Advisory — MENA & Africa</title>
+<meta name="description" content="Professional cybersecurity services: penetration testing, security audits, AI guardrails, and corporate training. Led by Ahmed Chiboub, 10+ years experience.">
+<meta name="keywords" content="cybersecurity, penetration testing, AI security, ISO 27001, complia
+```
+
+### Command: curl -s https://cyberian-defenses.com/robots.txt
+- Exit Code: 0
+- Duration: 0.32s
+- Success: True
+
+```
+User-agent: *
+Allow: /
+
+Sitemap: https://cyberian-defenses.com/sitemap.xml
+
+Host: https://cyberian-defenses.com
+
+```
+
+### Command: curl -s https://cyberian-defenses.com/sitemap.xml
+- Exit Code: 0
+- Duration: 0.2s
+- Success: True
+
+```
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://cyberian-defenses.com/index.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://cyberian-defenses.com/services.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cyberian-defenses.com/about.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</
+```
+
+### Command: curl -sI -H "User-Agent: sqlmap/1.5.7" "https://cyberian-defenses.com/?id=1%27+OR+%271%27%3D%271"
+- Exit Code: -2
+- Duration: 0s
+- Success: False
+
+- BLOCKED: TARGET OUT OF SCOPE: hostname '1.5.7' is not within mission scope (cyberian-defenses.com, cyberian-defenses.com)
+
+### Command: curl -sI -H "User-Agent: Nessus" https://cyberian-defenses.com/?scan=test
+- Exit Code: 0
+- Duration: 0.38s
+- Success: True
+
+```
+HTTP/1.1 200 OK
+Server: nginx/1.24.0 (Ubuntu)
+Date: Wed, 02 Sep 2026 21:55:25 GMT
+Content-Type: text/html
+Content-Length: 18860
+Last-Modified: Mon, 24 Aug 2026 05:34:19 GMT
+Connection: keep-alive
+Vary: Accept-Encoding
+ETag: "6a8bd7db-49ac"
+Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+X-Content-Type-Options: nosniff
+X-Frame-Options: SAMEORIGIN
+X-XSS-Protection: 1; mode=block
+Referrer-Policy: strict-origin-when-cross-origin
+Permissions-Policy: camera=(), microphone=(), g
+```
+
+### Command: curl -s https://cyberian-defenses.com.s3.amazonaws.com
+- Exit Code: -2
+- Duration: 0s
+- Success: False
+
+- BLOCKED: TARGET OUT OF SCOPE: hostname 'cyberian-defenses.com.s3.amazonaws.com' is not within mission scope (cyberian-defenses.com, cyberian-defenses.com)
+
+### Command: curl -s https://cyberiandefenses.s3.amazonaws.com
+- Exit Code: -2
+- Duration: 0s
+- Success: False
+
+- BLOCKED: TARGET OUT OF SCOPE: hostname 'cyberiandefenses.s3.amazonaws.com' is not within mission scope (cyberian-defenses.com, cyberian-defenses.com)
+
+### Command: curl -s https://cyberian-defenses-com.s3.amazonaws.com
+- Exit Code: -2
+- Duration: 0s
+- Success: False
+
+- BLOCKED: TARGET OUT OF SCOPE: hostname 'cyberian-defenses-com.s3.amazonaws.com' is not within mission scope (cyberian-defenses.com, cyberian-defenses.com)
+
+### Command: curl -sI https://cyberiandefenses.blob.core.windows.net
+- Exit Code: -2
+- Duration: 0s
+- Success: False
+
+- BLOCKED: TARGET OUT OF SCOPE: hostname 'cyberiandefenses.blob.core.windows.net' is not within mission scope (cyberian-defenses.com, cyberian-defenses.com)
+
+### Command: curl -sI https://cyberian-defenses.azureedge.net
+- Exit Code: -2
+- Duration: 0s
+- Success: False
+
+- BLOCKED: TARGET OUT OF SCOPE: hostname 'cyberian-defenses.azureedge.net' is not within mission scope (cyberian-defenses.com, cyberian-defenses.com)
+
+### Command: curl -s https://cyberian-defenses.com | head -200
+- Exit Code: -2
+- Duration: 0s
+- Success: False
+
+- BLOCKED: SHELL INJECTION RISK: command contains '|' which bypasses tool scope check. Category 'passive_recon' does not allow shell features. Use shell-capable tools (bash/python3) for complex commands.
+

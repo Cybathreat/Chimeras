@@ -370,6 +370,24 @@ class TargetValidator:
             except ValueError:
                 # Not an IP — treat as hostname
                 hosts.add(token.lower())
+                # v3.0 fix: a scoped hostname means its CURRENT IPs are in
+                # scope too (CDN rotation aware). Resolve now so tools that
+                # take raw IPs (whois, nmap against resolved IP) pass
+                # validation. Same policy as the kernel firewall layer.
+                try:
+                    for ai in socket.getaddrinfo(token.lower(), None):
+                        ip = ai[4][0]
+                        if ':' not in ip:  # v4 only for network parsing
+                            try:
+                                networks.append(
+                                    ipaddress.ip_network(ip + '/32', strict=False)
+                                )
+                            except ValueError:
+                                pass
+                except (socket.gaierror, OSError):
+                    # Cannot resolve now — hostname stays in scope; raw-IP
+                    # commands against it will fail validation (fail safe)
+                    pass
 
     def _extract_targets(self, command: str) -> Tuple[List[str], List[str]]:
         """Extract IP addresses and hostnames from a command string.
