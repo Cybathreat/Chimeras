@@ -163,23 +163,10 @@ Respond with the complete report as markdown. Do NOT wrap in JSON. Do NOT wrap i
                 context += "\n\n## Artifacts Left on Target (Cleanup Tracking)\n"
                 context += self._format_artifacts_for_report(artifacts)
 
-            # ─── v3.0.2: Tool requests — arsenal improvement loop ───
-            # Every unfulfillable need the engagement surfaced. Include it in
-            # the report verbatim: this is the data that justifies tier image
-            # and TOOL_CATEGORIES updates for the NEXT engagement.
-            try:
-                tr_path = self.engagement_dir / "tool_requests.csv"
-                if tr_path.exists():
-                    tr_content = tr_path.read_text(encoding="utf-8").strip()
-                    if tr_content:
-                        context += (
-                            "\n\n## Tool Requests (Arsenal Improvement Loop)\n\n"
-                            "Tools the swarm needed but did not have. Review after "
-                            "the engagement to update tier images and tool categories.\n\n"
-                            f"```csv\n{tr_content}\n```\n"
-                        )
-            except Exception as e:
-                self._log(f"tool_requests.csv read failed: {e}", "WARN")
+            # v3.0.2 NOTE: tool_requests.csv is deliberately NOT included in
+            # the client report. It is internal arsenal-improvement data.
+            # Per-engagement copy: engagement/tool_requests.csv
+            # Cross-engagement accumulator: tool_requests_registry.csv (repo root)
 
             # Ask LLM to generate the report
             self._log("Asking LLM to generate final report...", "THINK")
