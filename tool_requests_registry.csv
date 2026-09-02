@@ -1,0 +1,3 @@
+date,agent,tool,description,use_case,arguments,source
+2026-09-02T23:17:08.982499+00:00,marksman,hashcat,GPU password cracking,crack NTLM hashes from impacket-secretsdump,hashcat -m 1000 hashes.txt /usr/share/wordlists/rockyou.txt,llm_request
+2026-09-02T23:17:08.982499+00:00,marksman,feroxbuster,recursive content discovery,directory enum with recursion on blog targets,feroxbuster -u https://target --recursive,llm_request
