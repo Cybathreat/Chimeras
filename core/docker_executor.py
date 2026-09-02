@@ -159,22 +159,26 @@ def _image_exists(image: str) -> bool:
 
 
 def build_images() -> Dict[str, bool]:
-    """Build all tiered Docker images. Returns dict of tier → success."""
+    """Build all tiered Docker images. Returns dict of tier → success.
+    
+    Build context is the docker/ directory (entrypoint.sh lives there);
+    each tier's Dockerfile is selected via -f.
+    """
     results = {}
     docker_dir = Path(__file__).parent.parent / "docker"
     
     for tier, image_name in IMAGE_NAMES.items():
-        tier_dir = docker_dir / tier
-        if not tier_dir.exists():
-            logger.warning(f"Tier directory not found: {tier_dir}")
+        dockerfile = docker_dir / tier / "Dockerfile"
+        if not dockerfile.exists():
+            logger.warning(f"Tier Dockerfile not found: {dockerfile}")
             results[tier] = False
             continue
         
-        logger.info(f"Building {image_name} from {tier_dir}")
+        logger.info(f"Building {image_name} (context={docker_dir}, file={dockerfile})")
         try:
             result = subprocess.run(
-                ["docker", "build", "-t", image_name, str(tier_dir)],
-                capture_output=True, text=True, timeout=600,
+                ["docker", "build", "-f", str(dockerfile), "-t", image_name, str(docker_dir)],
+                capture_output=True, text=True, timeout=1800,
             )
             results[tier] = result.returncode == 0
             if results[tier]:
