@@ -1,7 +1,7 @@
 {
-  "saved_at": "2026-09-02T21:50:32.359492",
-  "mission_state": "recon",
-  "last_decision": "recon",
+  "saved_at": "2026-09-02T22:15:05.889930",
+  "mission_state": "vuln_detection",
+  "last_decision": "report",
   "state": {
     "mission": {
       "name": "Op Cyberian Defenses",
@@ -10,7 +10,7 @@
       "scope": "cyberian-defenses.com",
       "target": "cyberian-defenses.com",
       "lateral_objectives": "",
-      "phase": "recon"
+      "phase": "vuln_detection"
     },
     "swarm_config": {
       "version": "2.0",
@@ -75,12 +75,10 @@
     "reasoning_reports": {
       "warchief": {
         "needed": true,
-        "strategy": "Re-dispatch ARIA \u2014 LLM analysis failed (truncated JSON), and several critical recon tasks are missing from the partial output. Need properly structured findings plus completion of subdomain enumeration, takeover validation, cloud assets, JS analysis, and WAF identification before routing to Lisa.",
-        "confidence": 0.85,
-        "reasoning": "ARIA's LLM analysis failed with truncated JSON. Partial output reveals useful data: nginx/1.24.0 on Ubuntu at 76.13.46.223, Zoho mail, SystemDNS nameservers, Tailwind CSS/Calendly/Formspree tech stack, missing DNSSEC/CAA/IPv6. However, critical recon tasks are missing: multi-source subdomain enumeration, subdomain takeover validation, WAF/CDN identification (nginx is the server but is there a WAF?), cloud asset discovery, JavaScript file analysis, historical DNS, and credential/employee harvesting. Without a complete attack surface map, Lisa cannot properly target her scans. This is recon cycle 2 of max 5 \u2014 re-dispatch is appropriate.",
-        "commands": [],
-        "decision": "recon",
-        "assessment": "ARIA completed first pass but LLM analysis failed \u2014 raw data exists in engagement/raw/ but structured findings are missing. Partial data shows nginx/1.24.0, Ubuntu, IP 76.13.46.223, Zoho mail, Tailwind CSS stack. Critical gaps: no multi-source subdomain enumeration, no takeover validation, no WAF ID, no cloud assets, no JS analysis, no credential harvesting. Must re-dispatch to complete the attack surface map before active scanning.",
+        "strategy": "Route to parallel vuln_detection: Bloodhound for infrastructure CVE matching against nginx 1.24.0 and OpenSSH 9.6p1, SSL/TLS deep analysis, and config audit. Wasp for OWASP Top 10 web testing including directory enumeration that Lisa couldn't perform, robots.txt analysis, form testing, and JS endpoint discovery. Lisa cycle 2 produced sufficient versioned service data to proceed.",
+        "confidence": 0.82,
+        "reasoning": "Lisa cycle 2 significantly improved over cycle 1. We now have: OpenSSH 9.6p1 Ubuntu 3 with version string, auth methods (password enabled), and algorithm enumeration (hmac-sha1 weak MAC). nginx 1.24.0 with security headers, CSP unsafe-inline, HSTS preload. SSL/TLS hardened with no Heartbleed. High ports confirmed filtered by firewall \u2014 not a gap, firewall is doing its job. Remaining gaps (UDP unconfirmed, directory enum failed due to missing wordlists, robots.txt contents not retrieved) are NOT blockers for vuln_detection \u2014 Bloodhound can check CVEs against confirmed versions, Wasp can perform its own web content discovery and OWASP testing. Critically, OpenSSH 9.6p1 falls within CVE-2024-6387 (regreSSHion) affected range (8.5p1\u20139.7p1) \u2014 Bloodhound must verify this. nginx 1.24.0 is relatively recent but needs CVE check. Moving to parallel vuln_detection is the correct routing decision \u2014 we have enough data and further scan cycles would yield diminishing returns on this hardened, small-surface target.",
+        "assessment": "Lisa cycle 2 substantially complete. Versioned services confirmed: OpenSSH 9.6p1 Ubuntu 3 (password auth, hmac-sha1), nginx 1.24.0 on Ubuntu, ports 22/80/443 only, high ports filtered. SSL/TLS hardened, HSTS preload enabled. Web tech: Tailwind CSS CDN, formspree.io external form service, /blog/ directory. Key person: Ahmed Chiboub (ahmed.chiboub@cyberian-defenses.com). Confirmed issues: SSH password auth (Medium), CSP unsafe-inline (Medium), nginx version disclosure (Low), hmac-sha1 weak MAC (Low). Remaining gaps are non-blocking: UDP unconfirmed (likely filtered), directory enumeration failed (Wasp can handle), robots.txt unread (Wasp can retrieve). Target is a hardened cybersecurity company website with small attack surface. Ready for vuln_detection.",
         "scope_change": {
           "add": [],
           "remove": []
@@ -88,25 +86,59 @@
         "forbid": [],
         "depth_assessment": [
           {
-            "finding": "Partial recon output \u2014 nginx/1.24.0 on Ubuntu at 76.13.46.223, Zoho mail, SystemDNS, Tailwind CSS/Calendly/Formspree stack",
+            "finding": "SSH service on port 22",
+            "verdict": "thorough",
+            "missed_followups": [],
+            "redispatch_instructions": ""
+          },
+          {
+            "finding": "HTTP/HTTPS services on ports 80/443",
+            "verdict": "thorough",
+            "missed_followups": [],
+            "redispatch_instructions": ""
+          },
+          {
+            "finding": "High port TCP scan (1001-65535)",
+            "verdict": "thorough",
+            "missed_followups": [],
+            "redispatch_instructions": "High ports confirmed filtered by firewall \u2014 no further action needed"
+          },
+          {
+            "finding": "UDP service confirmation",
             "verdict": "superficial",
             "missed_followups": [
-              "Multi-source subdomain enumeration (crt.sh + passive DNS + brute-forcing + permutations)",
-              "Subdomain takeover validation on all discovered CNAMEs",
-              "WAF/CDN identification beyond server header (wafw00f)",
-              "Cloud asset discovery (S3, Azure, GCP, Firebase)",
-              "JavaScript file analysis for endpoints, API keys, hidden routes",
-              "Historical DNS and IP changes",
-              "Employee/email harvesting and leaked credential search",
-              "DNSSEC, CAA, IPv6 gap documentation",
-              "Proper structured JSON output \u2014 LLM analysis failed"
+              "Protocol-specific probes for UDP 53/161"
             ],
-            "redispatch_instructions": "Re-run passive recon with focus on missing tasks. 1) Enumerate subdomains from crt.sh, passive DNS, DNS brute-forcing with seclists wordlist, and permutation generation. 2) Validate every discovered subdomain for takeover potential (check dangling CNAMEs against Heroku, GitHub Pages, S3, Azure, etc). 3) Run wafw00f against cyberian-defenses.com to identify WAF/CDN. 4) Check for cloud assets: S3 buckets (cyberian-defenses, cyberian-defenses-backup), Azure blobs, GCP storage, Firebase. 5) Download and analyze JavaScript files for API endpoints, keys, hidden routes. 6) Historical DNS via SecurityTrails or similar. 7) Email harvesting for Ahmed Chiboub and leaked credentials. 8) Ensure output is valid complete JSON \u2014 previous response was truncated. Raw tool output already exists in engagement/raw/ \u2014 review and incorporate those results."
+            "redispatch_instructions": "Low priority \u2014 likely firewall-filtered. Bloodhound can attempt DNS version query and SNMP community test if needed"
+          },
+          {
+            "finding": "Directory enumeration",
+            "verdict": "untouched",
+            "missed_followups": [
+              "No wordlists available, enumeration failed entirely"
+            ],
+            "redispatch_instructions": "Wasp must perform manual curl-based path testing: /admin/, /api/, /.git/HEAD, /.env, /backup/, /config/, /server-status, /wp-admin/, /robots.txt, /sitemap.xml, /.well-known/"
+          },
+          {
+            "finding": "robots.txt contents",
+            "verdict": "superficial",
+            "missed_followups": [
+              "Contents not retrieved despite detecting file"
+            ],
+            "redispatch_instructions": "Wasp must curl https://cyberian-defenses.com/robots.txt and analyze Disallow entries"
+          },
+          {
+            "finding": "Virtual host enumeration",
+            "verdict": "superficial",
+            "missed_followups": [
+              "Host header injection testing not completed"
+            ],
+            "redispatch_instructions": "Wasp should test different Host headers against the HTTPS service"
           }
         ],
-        "depth_gap_carryforward": "ARIA cycle 1 produced partial data but LLM analysis failed (truncated JSON). Known: nginx/1.24.0, Ubuntu, IP 76.13.46.223, Zoho mail, Tailwind CSS stack, missing DNSSEC/CAA/IPv6. Missing: multi-source subdomain enumeration, takeover validation, WAF ID, cloud assets, JS analysis, historical DNS, credential harvesting. Re-dispatch cycle 2 with explicit instructions to complete all missing tasks and output valid JSON.",
-        "updated_plan": "# Engagement Plan: cyberian-defenses.com\n\n## Target\ncyberian-defenses.com (external scope)\n\n## Phase 1: Passive Reconnaissance (IN PROGRESS \u2014 Cycle 2)\n- **Cycle 1 Result**: ARIA executed tools but LLM analysis failed (truncated JSON). Partial data: nginx/1.24.0, Ubuntu, IP 76.13.46.223, Zoho mail, SystemDNS, Tailwind CSS/Calendly/Formspree, missing DNSSEC/CAA/IPv6. Raw output in engagement/raw/.\n- **Cycle 2 Dispatch**: Re-dispatch ARIA to complete missing tasks and produce valid structured output\n- **Missing Tasks**: Multi-source subdomain enumeration, takeover validation, wafw00f WAF ID, cloud asset discovery, JS analysis, historical DNS, credential harvesting\n- **Success Criteria**: Complete attack surface map with versioned technologies, all subdomains with takeover status, WAF identified, cloud assets enumerated, valid JSON output\n\n## Phase 2: Active Scanning (PENDING)\n- **Dependency**: Complete ARIA output\n- **Bot**: Lisa\n- **Tasks**: Full TCP port range, UDP scan, service version detection, NSE scripts, OS fingerprinting, per-service enumeration\n\n## Phase 3: Vulnerability Detection (PENDING)\n- **Bots**: Bloodhound (infra) + Wasp (web) \u2014 parallel\n- **Dependency**: Lisa versioned service map\n\n## Phase 4: Exploitation (PENDING \u2014 HUMAN GATE)\n- **Bot**: Marksman\n\n## Phase 5: Post-Exploitation (PENDING)\n- **Bots**: Magician \u2192 Thief\n\n## Phase 6: Reporting (PENDING)\n- **Bot**: Bookkeeper\n\n## Aggressiveness: Cautious\n## Recon Cycles: 2/5",
-        "mission_phase": "recon"
+        "depth_gap_carryforward": "FOR BLOODHOUND: (1) Check CVE-2024-6387 regreSSHion against OpenSSH 9.6p1 \u2014 version is within affected range 8.5p1-9.7p1, verify reachability. (2) Check all CVEs for nginx 1.24.0. (3) Deep SSL/TLS analysis: cipher suites, protocol versions, certificate chain, POODLE/BEAST/CRIME/BREACH. (4) Config audit: curl /.git/HEAD, /.env, /server-status, /actuator, /admin/. (5) Retrieve robots.txt contents. (6) WAF detection and typing. FOR WASP: (1) Manual directory enumeration via curl: /admin/, /api/, /.git/HEAD, /.env, /backup/, /config/, /server-status, /wp-admin/, /sitemap.xml, /.well-known/. (2) Retrieve and analyze robots.txt. (3) OWASP Top 10 on all discovered endpoints including /blog/. (4) Test formspree.io integration for SSRF/data exposure. (5) JS analysis for hidden endpoints and API keys. (6) CSP unsafe-inline means XSS payloads with inline scripts may execute \u2014 test aggressively. (7) Host header injection testing on HTTPS service. (8) Test for SQLi, XSS, SSTI on any input vectors including blog and contact form.",
+        "updated_plan": "## Engagement Plan \u2014 cyberian-defenses.com\n\n### Phase 1: Recon (COMPLETE \u2014 2 cycles)\n- ARIA mapped attack surface: 1 domain, 1 subdomain (azureedge.net \u2014 CDN, non-resolving), tech stack with versions, key person identified\n- Subdomain sources: CT logs, DNS records, search engine\n- Cloud assets: Azure CDN subdomain (non-resolving)\n\n### Phase 2: Scanning (COMPLETE \u2014 2 cycles)\n- Lisa confirmed: ports 22/80/443, high ports filtered\n- **Versioned services**: OpenSSH 9.6p1 Ubuntu 3, nginx 1.24.0 Ubuntu\n- **SSH**: Password auth enabled, hmac-sha1 weak MAC, algorithms enumerated\n- **Web**: Tailwind CSS CDN, formspree.io, /blog/ directory, CSP unsafe-inline, HSTS preload\n- **SSL/TLS**: Hardened, no legacy protocols, no Heartbleed\n- **Gaps carried forward**: UDP unconfirmed (low priority), directory enum (Wasp will handle)\n\n### Phase 3: Vulnerability Detection (CURRENT \u2014 parallel dispatch)\n- **Bloodhound** (infrastructure): CVE matching for OpenSSH 9.6p1 (CVE-2024-6387 regreSSHion \u2014 IN RANGE), nginx 1.24.0 CVEs, deep SSL/TLS cipher/protocol analysis, config audit (.git, .env, server-status, actuator), WAF detection\n- **Wasp** (web app): OWASP Top 10 testing, manual directory enumeration (no wordlists in env \u2014 use curl), robots.txt retrieval, formspree.io integration testing, JS endpoint analysis, CSP unsafe-inline XSS testing, Host header injection, SQLi/XSS/SSTI on blog and contact form\n- **Running in parallel** \u2014 fan out both simultaneously\n\n### Phase 4: Exploitation (PENDING \u2014 HUMAN GATE)\n- Bot: Marksman\n- Trigger: Bloodhound+Wasp confirmed exploitable findings\n- **Key candidate**: CVE-2024-6387 regreSSHion if OpenSSH 9.6p1 confirmed vulnerable and reachable\n\n### Phase 5: Post-Exploitation (PENDING)\n- Magician (privesc) \u2192 Thief (exfil)\n\n### Phase 6: Reporting (PENDING)\n- Bookkeeper synthesizes all findings into client report\n\n### Scope: cyberian-defenses.com\n### Aggressiveness: Cautious\n### Recon: 2/5 | Scan: 2/5 | Vuln: 1/5",
+        "mission_phase": "vuln_detection"
       },
       "aria": {
         "needed": true,
@@ -141,15 +173,126 @@
           "host cyberian-defenses.com",
           "dig axfr cyberian-defenses.com @ns1.cyberian-defenses.com"
         ]
+      },
+      "lisa": {
+        "needed": true,
+        "strategy": "Cycle 2 corrective: (1) targeted high-port TCP scan on common service ports with -sV, (2) UDP service version confirmation on key ports, (3) SSH NSE scripts for version+auth methods, (4) HTTP NSE scripts including http-robots.txt to retrieve contents, (5) directory enumeration with valid wordlists, (6) whatweb+sslscan for deep fingerprinting, (7) Azure CDN scan, (8) vhost enumeration, (9) blog subdirectory brute-force",
+        "confidence": 0.95,
+        "reasoning": "WarChief identified 7 specific gaps from cycle 1: high ports unscanned, UDP inconclusive, dir enum failed, robots.txt unread, SSH version missing, NSE not run, vhost not investigated. Each command addresses one or more gaps. Cautious timing (-T3) per aggressiveness level. Multiple wordlist paths attempted since cycle 1 failed on missing file. Azure CDN now in scope per WarChief approval.",
+        "commands": [
+          "nmap -sS -T3 -p 3000,4200,5000,5601,6379,7001,7077,8000,8008,8080,8081,8082,8083,8088,8181,8443,8444,8880,8888,9000,9090,9100,9200,9300,9999,10000,10250,11211,15672,1883,3306,4443,50000,5432,5500,6443,7474,27017 -sV cyberian-defenses.com",
+          "nmap -sU -sV -T3 -p 53,123,137,138,139,161,500,1900,4500,5353 cyberian-defenses.com",
+          "nmap -sV -T3 -p 22 --script ssh2-enum-algos,ssh-auth-methods,ssh-hostkey cyberian-defenses.com",
+          "nmap -sV -T3 -p 80,443 --script http-title,http-headers,http-robots.txt,http-enum,http-server-header,http-security-headers,http-sitemap-generator,ssl-cert,ssl-enum-ciphers cyberian-defenses.com",
+          "gobuster dir -u https://cyberian-defenses.com -w /usr/share/wordlists/dirb/common.txt -t 20 -k --no-error",
+          "gobuster dir -u https://cyberian-defenses.com -w /usr/share/seclists/Discovery/Web-Content/common.txt -t 20 -k --no-error",
+          "gobuster dir -u https://cyberian-defenses.com/blog/ -w /usr/share/wordlists/dirb/common.txt -t 20 -k --no-error",
+          "whatweb -a 3 https://cyberian-defenses.com",
+          "sslscan cyberian-defenses.com",
+          "nmap -sV -T3 -p 80,443 cyberian-defenses.azureedge.net",
+          "nmap -p 80,443 --script http-vhost --script-args http-vhost.hostnames=cyberian-defenses.com,www.cyberian-defenses.com,blog.cyberian-defenses.com,admin.cyberian-defenses.com,dev.cyberian-defenses.com,test.cyberian-defenses.com,staging.cyberian-defenses.com,api.cyberian-defenses.com,mail.cyberian-defenses.com,portal.cyberian-defenses.com,crm.cyberian-defenses.com cyberian-defenses.com",
+          "httpx -u https://cyberian-defenses.com -status-code -content-length -title -tech-detect -follow-redirects"
+        ],
+        "skip_reason": ""
       }
     },
     "recon_report": {},
+    "scan_report": {
+      "host": "cyberian-defenses.com",
+      "ip": "76.13.46.223",
+      "rdns": "srv1479954.hstgr.cloud",
+      "os": "Ubuntu Linux",
+      "open_tcp_ports": [
+        {
+          "port": 22,
+          "service": "ssh",
+          "version": "OpenSSH 9.6p1 Ubuntu 3ubuntu13.18",
+          "protocol": "2.0"
+        },
+        {
+          "port": 80,
+          "service": "http",
+          "version": "nginx 1.24.0 (Ubuntu)",
+          "redirect": "https://cyberian-defenses.com/"
+        },
+        {
+          "port": 443,
+          "service": "https",
+          "version": "nginx 1.24.0 (Ubuntu)"
+        }
+      ],
+      "filtered_tcp_ports": "38 high ports (3000-27017) all filtered",
+      "udp_ports": "10 ports open|filtered (53,123,137-139,161,500,1900,4500,5353)",
+      "ssh_details": {
+        "auth_methods": [
+          "publickey",
+          "password"
+        ],
+        "host_keys": {
+          "ecdsa": "256 df:f6:b1:3c:05:f1:b0:8f:c0:13:06:18:55:ff:d7:a5",
+          "ed25519": "256 fb:00:5b:c4:70:2a:50:63:69:fe:8b:c2:8c:8c:77:59"
+        },
+        "weak_algos": [
+          "hmac-sha1",
+          "hmac-sha1-etm@openssh.com"
+        ],
+        "kex_algos_count": 12,
+        "encryption_algos": [
+          "chacha20-poly1305@openssh.com",
+          "aes128-ctr",
+          "aes192-ctr",
+          "aes256-ctr",
+          "aes128-gcm@openssh.com",
+          "aes256-gcm@openssh.com"
+        ]
+      },
+      "tls": {
+        "protocols_enabled": [
+          "TLSv1.2",
+          "TLSv1.3"
+        ],
+        "protocols_disabled": [
+          "SSLv2",
+          "SSLv3",
+          "TLSv1.0",
+          "TLSv1.1"
+        ],
+        "heartbleed": "not vulnerable",
+        "preferred_cipher": "TLS_AES_128_GCM_SHA256 (TLSv1.3)"
+      },
+      "web_tech": [
+        "Nginx 1.24.0",
+        "Tailwind CSS",
+        "Ubuntu",
+        "HTML5"
+      ],
+      "security_headers": {
+        "HSTS": "max-age=63072000; includeSubDomains; preload",
+        "X-Frame-Options": "SAMEORIGIN",
+        "X-XSS-Protection": "1; mode=block",
+        "X-Content-Type-Options": "nosniff",
+        "CSP": "default-src 'self'; script-src 'self' 'unsafe-inline' cdn.tailwindcss.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://formspree.io; frame-ancestors 'self'; form-action 'self' https://formspree.io;"
+      },
+      "email": "ahmed.chiboub@cyberian-defenses.com",
+      "author": "Ahmed Chiboub",
+      "page_title": "Cyberian Defenses | Cybersecurity Advisory \u2014 MENA & Africa",
+      "external_services": [
+        "cdn.tailwindcss.com",
+        "formspree.io"
+      ],
+      "failed_enumeration": [
+        "Directory brute-force (no wordlists)",
+        "http-vhost script (not available)",
+        "azureedge.net subdomain (doesn't resolve)"
+      ]
+    },
     "human_approval": true,
     "lateral_approval": true,
     "abort_flag": false,
-    "last_decision": "recon",
+    "last_decision": "report",
     "loop_count": {
-      "recon": 1
+      "recon": 1,
+      "scan": 2
     },
     "max_loops_per_phase": 5,
     "discovered_targets": [
@@ -180,16 +323,41 @@
         "confidence": 0.85,
         "timestamp": "2026-09-02T21:50:32.355961",
         "overrides": null
+      },
+      {
+        "decision": "scan",
+        "reasoning": "ARIA has run 2 cycles. Cycle 1: LLM analysis failed (truncated JSON). Cycle 2: Tool execution blocked by shell injection checks (pipe characters) and scope blocks on legitimate subdomain cyberian-defenses.azureedge.net. We have actionable partial data: target IP 76.13.46.223, nginx/1.24.0 on Ubuntu, Tailwind CSS/Calendly/Formspree stack, Zoho mail, SystemDNS, key person Ahmed Chiboub. This is sufficient for Lisa to begin active scanning \u2014 she can do full TCP/UDP port scans, service version detection, and per-service enumeration on the known IP. The azureedge.net subdomain is clearly a CDN front for the target domain and should be in scope. Recon depth gaps (subdomain takeover, WAF ID via wafw00f, JS analysis, cloud assets) are noted but shouldn't block forward progress \u2014 Lisa's scanning will itself reveal additional attack surface. If Lisa finds web services, Wasp can do JS analysis during vuln detection. Re-dispatching ARIA a third time risks hitting the same tool execution constraints.",
+        "phase": "scanning",
+        "confidence": 0.7,
+        "timestamp": "2026-09-02T21:58:31.988330",
+        "overrides": null
+      },
+      {
+        "decision": "scan",
+        "reasoning": "Lisa completed cycle 1 with partial results: 3 ports found (22/SSH, 80/HTTP, 443/HTTPS), nginx/1.24.0 identified with version, /blog/ and /robots.txt discovered, vhost catch-all on 443 detected, CSP with unsafe-inline noted. However, Lisa's scan has CRITICAL gaps: (1) high TCP ports 1001-65535 not scanned \u2014 timed out, hidden services may exist; (2) UDP all returned open|filtered \u2014 no service confirmation on 53/161; (3) directory brute-forcing failed \u2014 missing wordlist file, no web content map for Wasp; (4) /robots.txt found but contents not retrieved \u2014 basic follow-up missed; (5) SSH version string not explicitly reported \u2014 needed for CVE matching; (6) NSE script results not shown; (7) vhost catch-all on 443 not investigated further. These gaps are too significant to proceed to vuln_detection \u2014 Bloodhound needs complete versioned service map, Wasp needs directory enumeration output. Re-dispatching Lisa (cycle 2/5) with specific corrective instructions. Also adding cyberian-defenses.azureedge.net to scope formally since it was approved but ARIA was blocked from scanning it.",
+        "phase": "scanning",
+        "confidence": 0.75,
+        "timestamp": "2026-09-02T22:07:24.605136",
+        "overrides": null
+      },
+      {
+        "decision": "report",
+        "reasoning": "Lisa cycle 2 significantly improved over cycle 1. We now have: OpenSSH 9.6p1 Ubuntu 3 with version string, auth methods (password enabled), and algorithm enumeration (hmac-sha1 weak MAC). nginx 1.24.0 with security headers, CSP unsafe-inline, HSTS preload. SSL/TLS hardened with no Heartbleed. High ports confirmed filtered by firewall \u2014 not a gap, firewall is doing its job. Remaining gaps (UDP unconfirmed, directory enum failed due to missing wordlists, robots.txt contents not retrieved) are NOT blockers for vuln_detection \u2014 Bloodhound can check CVEs against confirmed versions, Wasp can perform its own web content discovery and OWASP testing. Critically, OpenSSH 9.6p1 falls within CVE-2024-6387 (regreSSHion) affected range (8.5p1\u20139.7p1) \u2014 Bloodhound must verify this. nginx 1.24.0 is relatively recent but needs CVE check. Moving to parallel vuln_detection is the correct routing decision \u2014 we have enough data and further scan cycles would yield diminishing returns on this hardened, small-surface target.",
+        "phase": "vuln_detection",
+        "confidence": 0.82,
+        "timestamp": "2026-09-02T22:15:05.889127",
+        "overrides": null
       }
     ],
-    "mission_state": "recon",
+    "mission_state": "vuln_detection",
     "scope_exhausted": false,
     "confidence_threshold": 0.6,
     "scope_expansion_candidates": [],
     "approved_extra_targets": [
-      "cyberian-defenses.com"
+      "cyberian-defenses.com",
+      "cyberian-defenses.azureedge.net"
     ],
-    "depth_gap_carryforward": "DEPTH GAP on Partial recon output \u2014 nginx/1.24.0 on Ubuntu at 76.13.46.223, Zoho mail, SystemDNS, Tailwind CSS/Calendly/Formspree stack: missed Multi-source subdomain enumeration (crt.sh + passive DNS + brute-forcing + permutations), Subdomain takeover validation on all discovered CNAMEs, WAF/CDN identification beyond server header (wafw00f), Cloud asset discovery (S3, Azure, GCP, Firebase), JavaScript file analysis for endpoints, API keys, hidden routes, Historical DNS and IP changes, Employee/email harvesting and leaked credential search, DNSSEC, CAA, IPv6 gap documentation, Proper structured JSON output \u2014 LLM analysis failed. Instructions: Re-run passive recon with focus on missing tasks. 1) Enumerate subdomains from crt.sh, passive DNS, DNS brute-forcing with seclists wordlist, and permutation generation. 2) Validate every discovered subdomain for takeover potential (check dangling CNAMEs against Heroku, GitHub Pages, S3, Azure, etc). 3) Run wafw00f against cyberian-defenses.com to identify WAF/CDN. 4) Check for cloud assets: S3 buckets (cyberian-defenses, cyberian-defenses-backup), Azure blobs, GCP storage, Firebase. 5) Download and analyze JavaScript files for API endpoints, keys, hidden routes. 6) Historical DNS via SecurityTrails or similar. 7) Email harvesting for Ahmed Chiboub and leaked credentials. 8) Ensure output is valid complete JSON \u2014 previous response was truncated. Raw tool output already exists in engagement/raw/ \u2014 review and incorporate those results.",
-    "scope_version": 1
+    "depth_gap_carryforward": "DEPTH GAP on UDP service confirmation: missed Protocol-specific probes for UDP 53/161. Instructions: Low priority \u2014 likely firewall-filtered. Bloodhound can attempt DNS version query and SNMP community test if needed | DEPTH GAP on Directory enumeration: missed No wordlists available, enumeration failed entirely. Instructions: Wasp must perform manual curl-based path testing: /admin/, /api/, /.git/HEAD, /.env, /backup/, /config/, /server-status, /wp-admin/, /robots.txt, /sitemap.xml, /.well-known/ | DEPTH GAP on robots.txt contents: missed Contents not retrieved despite detecting file. Instructions: Wasp must curl https://cyberian-defenses.com/robots.txt and analyze Disallow entries | DEPTH GAP on Virtual host enumeration: missed Host header injection testing not completed. Instructions: Wasp should test different Host headers against the HTTPS service",
+    "scope_version": 3
   }
 }

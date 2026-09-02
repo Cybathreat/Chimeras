@@ -302,10 +302,11 @@ class TieredDockerExecutor:
             cmd.extend(["--cap-add", cap])
         
         # Read-only root filesystem (defense in depth)
+        # NOTE: no tmpfs on /root — it MASKS image content (nuclei templates
+        # broke this way). Read-only rootfs already makes /root immutable.
         cmd.extend([
             "--read-only",
             "--tmpfs", "/tmp:rw,size=256m",
-            "--tmpfs", "/root:rw,size=64m",
         ])
         
         # Mount engagement directory for evidence and findings
