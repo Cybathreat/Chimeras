@@ -148,6 +148,80 @@ _NIST_800_53 = {
     "mfa": ("NIST 800-53 IA-2", "Identification and authentication"),
 }
 
+# ─── v3.2: MENA/Enterprise compliance expansion ──────────────────────
+
+_SOC2 = {
+    "sql_injection": ("SOC 2 CC7.1", "System monitoring — vulnerability detection"),
+    "xss": ("SOC 2 CC7.1", "System monitoring — vulnerability detection"),
+    "ssl_tls": ("SOC 2 CC6.7", "Transmission and disposal — encryption in transit"),
+    "missing_encryption": ("SOC 2 CC6.7", "Transmission and disposal — encryption in transit"),
+    "weak_password": ("SOC 2 CC6.1", "Logical access — password policy"),
+    "auth_bypass": ("SOC 2 CC6.1", "Logical access — authentication controls"),
+    "default_credentials": ("SOC 2 CC6.1", "Logical access — credential management"),
+    "info_disclosure": ("SOC 2 CC6.5", "Data disposal — information protection"),
+    "privilege_escalation": ("SOC 2 CC6.3", "Access restrictions — least privilege"),
+    "idor": ("SOC 2 CC6.3", "Access restrictions — object-level authorization"),
+    "rate_limit": ("SOC 2 CC7.1", "System monitoring — rate limiting"),
+    "session_fixation": ("SOC 2 CC6.1", "Logical access — session management"),
+    "insecure_headers": ("SOC 2 CC6.7", "Transmission — security headers"),
+    "debug_enabled": ("SOC 2 CC7.1", "System monitoring — debug controls"),
+    "command_injection": ("SOC 2 CC7.1", "System monitoring — input validation"),
+    "ssrf": ("SOC 2 CC7.1", "System monitoring — server-side validation"),
+    "csrf": ("SOC 2 CC6.1", "Logical access — request authenticity"),
+    "ssti": ("SOC 2 CC7.1", "System monitoring — template injection"),
+    "lfi": ("SOC 2 CC7.1", "System monitoring — path traversal"),
+    "rfi": ("SOC 2 CC7.1", "System monitoring — file inclusion"),
+    "open_redirect": ("SOC 2 CC7.1", "System monitoring — redirect validation"),
+    "xxe": ("SOC 2 CC7.1", "System monitoring — XML processing"),
+    "deserialization": ("SOC 2 CC7.1", "System monitoring — deserialization"),
+    "cors": ("SOC 2 CC6.3", "Access restrictions — CORS policy"),
+    "jwt": ("SOC 2 CC6.1", "Logical access — token security"),
+    "mass_assignment": ("SOC 2 CC7.1", "System monitoring — input binding"),
+    "buffer_overflow": ("SOC 2 CC7.1", "System monitoring — memory safety"),
+    "path_traversal": ("SOC 2 CC7.1", "System monitoring — path traversal"),
+    "mfa": ("SOC 2 CC6.1", "Logical access — multi-factor authentication"),
+}
+
+_NIS2 = {
+    "sql_injection": ("NIS2 Article 21(1)", "Risk management — vulnerability remediation"),
+    "xss": ("NIS2 Article 21(1)", "Risk management — vulnerability remediation"),
+    "ssl_tls": ("NIS2 Article 21(2)(d)", "Cryptography — transport encryption"),
+    "missing_encryption": ("NIS2 Article 21(2)(d)", "Cryptography — transport encryption"),
+    "weak_password": ("NIS2 Article 21(2)(b)", "Access control — authentication"),
+    "auth_bypass": ("NIS2 Article 21(2)(b)", "Access control — authentication"),
+    "default_credentials": ("NIS2 Article 21(2)(b)", "Access control — default credentials"),
+    "info_disclosure": ("NIS2 Article 21(2)(e)", "Data protection — information handling"),
+    "privilege_escalation": ("NIS2 Article 21(2)(b)", "Access control — least privilege"),
+    "idor": ("NIS2 Article 21(2)(b)", "Access control — object-level auth"),
+    "rate_limit": ("NIS2 Article 21(2)(f)", "Availability — DoS protection"),
+    "session_fixation": ("NIS2 Article 21(2)(b)", "Access control — session management"),
+    "insecure_headers": ("NIS2 Article 21(2)(d)", "Cryptography — security headers"),
+    "debug_enabled": ("NIS2 Article 21(2)(e)", "Data protection — debug information"),
+    "command_injection": ("NIS2 Article 21(1)", "Risk management — input validation"),
+    "ssrf": ("NIS2 Article 21(1)", "Risk management — server-side validation"),
+    "mfa": ("NIS2 Article 21(2)(b)", "Access control — multi-factor authentication"),
+}
+
+_NCA_ECC = {
+    "sql_injection": ("NCA ECC 1.3.2", "Secure software development — injection prevention"),
+    "xss": ("NCA ECC 1.3.2", "Secure software development — injection prevention"),
+    "ssl_tls": ("NCA ECC 1.4.1", "Encryption — TLS configuration"),
+    "missing_encryption": ("NCA ECC 1.4.1", "Encryption — transport security"),
+    "weak_password": ("NCA ECC 1.2.1", "Authentication — password policy"),
+    "auth_bypass": ("NCA ECC 1.2.1", "Authentication — access control"),
+    "default_credentials": ("NCA ECC 1.2.1", "Authentication — default credentials"),
+    "info_disclosure": ("NCA ECC 1.5.1", "Data protection — information classification"),
+    "privilege_escalation": ("NCA ECC 1.2.3", "Access control — privilege management"),
+    "idor": ("NCA ECC 1.2.3", "Access control — object-level auth"),
+    "rate_limit": ("NCA ECC 1.3.4", "Application security — rate limiting"),
+    "session_fixation": ("NCA ECC 1.2.2", "Authentication — session management"),
+    "insecure_headers": ("NCA ECC 1.4.1", "Encryption — security headers"),
+    "debug_enabled": ("NCA ECC 1.5.1", "Data protection — debug exposure"),
+    "command_injection": ("NCA ECC 1.3.2", "Secure software development — injection prevention"),
+    "ssrf": ("NCA ECC 1.3.2", "Secure software development — server-side validation"),
+    "mfa": ("NCA ECC 1.2.1", "Authentication — multi-factor authentication"),
+}
+
 
 # ─── Vulnerability detection patterns ─────────────────────────────────
 
@@ -242,6 +316,9 @@ class ComplianceMapper:
             "PCI DSS 4.0": _PCI_DSS,
             "ISO 27001:2022": _ISO_27001,
             "NIST 800-53 Rev 5": _NIST_800_53,
+            "SOC 2": _SOC2,
+            "NIS2": _NIS2,
+            "NCA ECC (Saudi)": _NCA_ECC,
         }
 
     def map_finding(self, finding: Dict[str, Any]) -> Dict[str, Any]:

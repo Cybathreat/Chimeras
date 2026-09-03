@@ -30,6 +30,7 @@ from core.docx_exporter import export_docx, is_docx_available
 from core.evidence import EvidenceLocker
 from core.compliance import ComplianceMapper
 from core.coverage import CoverageTracker
+from core.portal_exporter import export_portal
 
 
 class Bookkeeper(BaseBot):
@@ -377,6 +378,22 @@ Respond with the complete report as markdown. Do NOT wrap in JSON. Do NOT wrap i
                 except Exception as e:
                     self._log(f"Coverage report failed: {e}", "ERROR")
 
+                # v3.2: Static client portal — self-contained HTML, no server
+                try:
+                    portal_path = self.engagement_dir / "report" / "client_portal.html"
+                    export_portal(
+                        output_path=portal_path,
+                        engagement_name=mission.get("target", "N/A"),
+                        client_name="",
+                        findings=structured_findings,
+                        compliance_data=mapper.format_for_report(structured_findings) if mapper else {},
+                        evidence_summary=locker.summary() if locker else {},
+                        narrative_md=report_text[:5000],
+                    )
+                    self._log(f"Client portal exported → {portal_path.name}", "PORTAL")
+                except Exception as e:
+                    self._log(f"Client portal failed: {e}", "ERROR")
+
                 self._log(f"Structured report generated: {len(structured_findings)} findings, "
                           f"{len(critical_findings)} critical", "REPORT")
             except Exception as e:
@@ -410,6 +427,7 @@ Respond with the complete report as markdown. Do NOT wrap in JSON. Do NOT wrap i
                 f"SARIF export: report/findings.sarif\n"
                 f"Compliance mapping: report/compliance_mapping.md\n"
                 f"Coverage report: report/coverage_report.md\n"
+                f"Client portal: report/client_portal.html\n"
                 f"Evidence locker: evidence/evidence_manifest.json\n"
                 f"Cleanup report: {'report/cleanup_report.md' if artifacts else 'N/A (no artifacts)'}\n"
                 f"Audit JSON: report/engagement_audit.json\n"
