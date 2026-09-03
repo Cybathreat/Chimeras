@@ -1,1 +1,0 @@
-FTL: Could not run nuclei: no templates provided for scan (multiple template paths returned same error).

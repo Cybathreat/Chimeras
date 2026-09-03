@@ -1,1 +1,0 @@
-http-enum: /blog/: Blog; /robots.txt: Robots file

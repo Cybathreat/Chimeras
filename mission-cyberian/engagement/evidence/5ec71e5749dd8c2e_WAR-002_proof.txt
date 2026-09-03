@@ -1,1 +1,0 @@
-Lisa cycle 2 reported hmac-sha1 in supported MAC algorithms list.

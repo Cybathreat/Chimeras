@@ -1,1 +1,0 @@
-mac_algorithms include hmac-sha1-etm@openssh.com and hmac-sha1 among 10 supported algorithms.

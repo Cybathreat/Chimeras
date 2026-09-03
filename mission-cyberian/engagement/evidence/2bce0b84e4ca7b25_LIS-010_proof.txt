@@ -1,1 +1,0 @@
-Nmap scan report for srv1479954.hstgr.cloud (76.13.46.223). OS guesses: Linux 4.15-5.19 (97%)

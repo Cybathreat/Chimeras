@@ -1,1 +1,0 @@
-HTTP/1.1 200 OK, Content-Length: 18860 for both admin.cyberian-defenses.com and test.cyberian-defenses.com Host headers.

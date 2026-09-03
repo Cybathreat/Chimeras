@@ -21,10 +21,10 @@ env/
 *~
 .DS_Store
 
-# Mission workspaces (per-operation data)
+# Mission workspaces (per-operation data) — both underscore and hyphen variants
 mission_*/
-mission/
-!mission_*/swarm-config.json
+mission*/
+!mission*/swarm-config.json
 
 # Local AI context files (not for version control)
 CLAUDE.md
@@ -32,7 +32,9 @@ CLAUDE.md
 # Engagement artifacts
 **/engagement/raw/
 **/engagement/poc/
+**/engagement/evidence/
 **/engagement/report/*.pdf
+**/engagement/report/*.docx
 **/engagement/warchief_decisions.json
 
 # Config with secrets

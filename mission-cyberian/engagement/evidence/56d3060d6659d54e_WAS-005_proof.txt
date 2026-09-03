@@ -1,1 +1,0 @@
-CSP: connect-src 'self' https://formspree.io; form-action 'self' https://formspree.io;

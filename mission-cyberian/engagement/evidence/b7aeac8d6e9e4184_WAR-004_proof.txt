@@ -1,1 +1,0 @@
-HTTP 403 for /.git and /.env — files exist but blocked. Bypass attempts not completed due to environmental constraints.

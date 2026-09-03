@@ -1,9 +1,0 @@
-Command: curl -s -k -o /dev/null -w "%{http_code} %{size_download}" https://cyberian-defenses.com/blog/admin
-Exit Code: 0
-Duration: 0.16s
-Timestamp: 2026-09-02T22:21:47Z
-============================================================
-STDOUT:
-404 9543============================================================
-STDERR:
-(empty)

@@ -1,1 +1,0 @@
-53/udp open|filtered domain; 123/udp open|filtered ntp; 137/udp open|filtered netbios-ns; 161/udp open|filtered snmp; 500/udp open|filtered isakmp

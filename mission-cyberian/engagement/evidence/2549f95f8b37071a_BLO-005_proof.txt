@@ -1,1 +1,0 @@
-WAF detection scripts ran on ports 80/443 with no WAF fingerprint results returned.
