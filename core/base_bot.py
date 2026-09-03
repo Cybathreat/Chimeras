@@ -24,6 +24,7 @@ from core.tool_cache import ToolCache
 from core.critical_buffer import CriticalFindingsBuffer
 from core.findings_store import FindingsStore
 from core.schemas import validate_bot_output, BotDecision, BotAnalysis, compute_content_hash
+from core.context_compaction import ContextCompactor
 
 
 class BaseBot(ABC):
@@ -171,6 +172,23 @@ class BaseBot(ABC):
         base_delay = 2.0
         last_error = None
         truncated_at_least_once = False
+
+        # v3.1: Proactive context compaction — compact before sending if over budget
+        try:
+            compactor = ContextCompactor()
+            if compactor.should_compact(prompt):
+                self._log("Proactive context compaction triggered", "COMPACT")
+                prompt, compaction_stats = compactor.compact(prompt)
+                if compaction_stats.get("compaction_needed"):
+                    self._log(
+                        f"Context compacted: {compaction_stats['original_tokens']}→"
+                        f"{compaction_stats['compacted_tokens']} tokens, "
+                        f"{compaction_stats['items_summarized']} items summarized",
+                        "COMPACT"
+                    )
+        except Exception as e:
+            # Compaction failure should never block the LLM call
+            pass
 
         while attempt < max_attempts:
             attempt += 1

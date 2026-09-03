@@ -13,6 +13,20 @@ All notable changes to Chimeras. Dates in Paris time (CEST/UTC+2).
 ### Tests — 31 new tests
 - `tests/test_evidence_compliance.py` — EvidenceLocker: manifest creation, SHA-256 hash verification, tamper detection, finding linking, empty dir handling, summary. ComplianceMapper: SQLi/XSS/SSL/CSRF/default-cred mappings, no-vuln findings, multiple vuln types, summary counts, format_for_report, vuln detection patterns.
 
+### Added — Retest Verifier
+- **RetestVerifier** (`core/retest.py`) — Re-runs PoC commands from previous engagement findings. Compares output to original proof_of_existence using indicator extraction (CVE IDs, error messages, vulnerability keywords). Status: Closed, Open, Partial, Error, Skipped. Remediation rate calculation. `report/retest_report.md` + `retest/retest_results.json`.
+
+### Added — Context Compaction
+- **ContextCompactor** (`core/context_compaction.py`) — Proactive token budget management. Estimates tokens before LLM call (4 chars/token heuristic). Compaction strategy: (1) truncate code blocks to summaries, (2) collapse whitespace, (3) summarize tool results, (4) truncate oldest context sections. Preserves most recent context. Integrated into BaseBot._llm() — triggers at 85% budget threshold before truncation happens.
+- **BaseBot integration** — Proactive compaction in _llm() method, before the retry-on-truncation loop. Fail-safe: compaction errors never block LLM calls.
+
+### Added — Coverage Tracker
+- **CoverageTracker** (`core/coverage.py`) — Records per-target/port/service/tool coverage entries in JSONL. `record_from_tool_result()` extracts info from tool result dicts. `get_untested_targets()` identifies gaps. `coverage_report()` generates markdown report with per-target coverage table, untested targets warnings, tools used list.
+- **Bookkeeper integration** — `report/coverage_report.md` generated at report time using discovered_targets from state.
+
+### Tests — 36 new tests
+- `tests/test_v31_modules.py` — RetestVerifier: command extraction (code blocks, inline, plain lines), output comparison (open/closed/partial), run_retest (skipped, report files, JSON validation, markdown report). ContextCompactor: token estimation, budget detection, compaction reduction, code block truncation, whitespace collapse, threshold, compression ratio, recent content preservation. CoverageTracker: record/get_all, by_target, by_tool, unested_targets, summary, coverage_report, empty, from_tool_result, file persistence.
+
 ## v3.1 — 2026-09-03 (initial)
 
 ### Added — PDF Report Export

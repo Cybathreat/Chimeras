@@ -29,6 +29,7 @@ from core.pdf_exporter import export_pdf, is_pdf_available
 from core.docx_exporter import export_docx, is_docx_available
 from core.evidence import EvidenceLocker
 from core.compliance import ComplianceMapper
+from core.coverage import CoverageTracker
 
 
 class Bookkeeper(BaseBot):
@@ -359,6 +360,21 @@ Respond with the complete report as markdown. Do NOT wrap in JSON. Do NOT wrap i
                 except Exception as e:
                     self._log(f"Compliance mapping failed: {e}", "ERROR")
 
+                # v3.1: Coverage report — proves thoroughness, reduces liability
+                try:
+                    tracker = CoverageTracker(self.engagement_dir)
+                    discovered = self.state.get("discovered_targets", [])
+                    tracker.coverage_report(discovered if discovered else targets)
+                    s = tracker.summary()
+                    self._log(
+                        f"Coverage report: {s['total_checks']} checks, "
+                        f"{s['unique_targets']} targets, {s['unique_tools']} tools → "
+                        f"coverage_report.md",
+                        "COVERAGE"
+                    )
+                except Exception as e:
+                    self._log(f"Coverage report failed: {e}", "ERROR")
+
                 self._log(f"Structured report generated: {len(structured_findings)} findings, "
                           f"{len(critical_findings)} critical", "REPORT")
             except Exception as e:
@@ -391,6 +407,7 @@ Respond with the complete report as markdown. Do NOT wrap in JSON. Do NOT wrap i
                 f"DOCX report: report/pentest_report.docx\n"
                 f"SARIF export: report/findings.sarif\n"
                 f"Compliance mapping: report/compliance_mapping.md\n"
+                f"Coverage report: report/coverage_report.md\n"
                 f"Evidence locker: evidence/evidence_manifest.json\n"
                 f"Cleanup report: {'report/cleanup_report.md' if artifacts else 'N/A (no artifacts)'}\n"
                 f"Audit JSON: report/engagement_audit.json\n"

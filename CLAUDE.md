@@ -19,7 +19,10 @@ Chimeras is an autonomous AI pentest swarm with adaptive decision-making. 9 bots
 - **DOCX report export** — python-docx Word document for clients who need editable format. CVSS color-coded tables, severity-shaded finding sections. `pentest_report.docx` in engagement report directory.
 - **Evidence Locker** — SHA-256 hashed evidence chain. Collects raw tool outputs, PoC files, and finding proofs into `evidence/` directory with tamper-detectable manifest. Every finding linked to its evidence hash. `evidence/evidence_manifest.json` with manifest integrity verification.
 - **Compliance Mapper** — Maps findings to OWASP ASVS 4.0, PCI DSS 4.0, ISO 27001:2022, NIST 800-53 Rev 5 control IDs. Keyword-based vuln type detection across 29 vulnerability categories. `report/compliance_mapping.md` with per-finding control references.
-- **347 pytest tests** — 80 new tests covering PDF/DOCX export, evidence locker, compliance mapping, markdown conversion, severity color mapping, vuln detection patterns.
+- **Retest Verifier** — Re-runs PoC commands from previous findings, compares output to determine Closed/Open/Partial status. `report/retest_report.md` + `retest/retest_results.json`. Consultants sell retests as recurring revenue.
+- **Context Compaction** — Proactive token budget management. Estimates tokens before LLM call, summarizes oversized tool outputs, preserves raw data in JSONL. Integrated into BaseBot._llm() — triggers before truncation, not after.
+- **Coverage Tracker** — Records per-target/port/service/tool coverage with timestamps. `report/coverage_report.md` proves thoroughness, identifies untested targets. Integrated into Bookkeeper report pipeline.
+- **383 pytest tests** — 116 new tests covering all v3.1 modules.
 
 ## Stack
 - Python 3.11+
