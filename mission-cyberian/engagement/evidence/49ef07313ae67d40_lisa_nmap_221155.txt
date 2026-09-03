@@ -1,0 +1,12 @@
+Command: nmap -sV -T3 -p 80,443 cyberian-defenses.azureedge.net
+Exit Code: 0
+Duration: 0.72s
+Timestamp: 2026-09-02T22:11:55Z
+============================================================
+STDOUT:
+Starting Nmap 7.99 ( https://nmap.org ) at 2026-09-02 22:11 +0000
+Nmap done: 0 IP addresses (0 hosts up) scanned in 0.63 seconds
+============================================================
+STDERR:
+Failed to resolve "cyberian-defenses.azureedge.net".
+WARNING: No targets were specified, so 0 hosts scanned.

@@ -1,0 +1,1 @@
+/blog/ returns HTTP 200 with 34749 bytes; sitemap.xml returns 200 with 1305 bytes containing blog post URLs.

@@ -1,0 +1,1 @@
+All 38 scanned ports are in ignored states. Not shown: 38 filtered tcp ports (no-response).

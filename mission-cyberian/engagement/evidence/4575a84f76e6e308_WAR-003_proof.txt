@@ -1,0 +1,1 @@
+SSH auth methods scan: password authentication enabled alongside publickey.

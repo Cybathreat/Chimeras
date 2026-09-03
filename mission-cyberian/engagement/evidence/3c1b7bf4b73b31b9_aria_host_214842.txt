@@ -1,0 +1,13 @@
+Command: host cyberian-defenses.com
+Exit Code: 0
+Duration: 0.29s
+Timestamp: 2026-09-02T21:48:42Z
+============================================================
+STDOUT:
+cyberian-defenses.com has address 76.13.46.223
+cyberian-defenses.com mail is handled by 50 mx3.zoho.com.
+cyberian-defenses.com mail is handled by 10 mx.zoho.com.
+cyberian-defenses.com mail is handled by 20 mx2.zoho.com.
+============================================================
+STDERR:
+(empty)

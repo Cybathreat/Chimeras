@@ -1,0 +1,1 @@
+CAA query returned no records. No certificate authority authorization restrictions in place.

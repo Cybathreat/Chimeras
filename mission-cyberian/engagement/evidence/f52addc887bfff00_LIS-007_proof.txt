@@ -1,0 +1,1 @@
+SSLv2 disabled, SSLv3 disabled, TLSv1.0 disabled, TLSv1.1 disabled, TLSv1.2 enabled, TLSv1.3 enabled. Not vulnerable to heartbleed.

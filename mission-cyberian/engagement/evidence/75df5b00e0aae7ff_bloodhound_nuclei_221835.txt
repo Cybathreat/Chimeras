@@ -1,0 +1,10 @@
+Command: nuclei -u https://cyberian-defenses.com -t /root/nuclei-templates/http/ -severity high,critical -silent
+Exit Code: 1
+Duration: 60.31s
+Timestamp: 2026-09-02T22:18:35Z
+============================================================
+STDOUT:
+(empty)
+============================================================
+STDERR:
+[[1;31mFTL[0m] Could not run nuclei: no templates provided for scan

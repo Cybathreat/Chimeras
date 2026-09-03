@@ -338,15 +338,20 @@ def export_docx(
     decision_audit: str = "",
     cleanup_status: str = "No cleanup performed.",
     mission_outcome: str = "",
+    narrative_md: str = "",
 ) -> bool:
     """Export a professional pentest report to DOCX.
 
-    Uses the same data structure as core/report_template.py:render_report.
-    Falls back gracefully if python-docx is not installed (returns False).
+    When narrative_md is provided, the DOCX renders the LLM-written narrative
+    as the primary body — the real pentest report. Evidence hashes and
+    compliance mappings are appended as appendices.
+
+    When narrative_md is empty, falls back to structured finding sections
+    (backward compatibility).
 
     Args:
         output_path: Where to write the .docx file.
-        See render_report() for other args.
+        narrative_md: LLM-generated report markdown (final_report.md content).
 
     Returns:
         True if DOCX was written, False if python-docx unavailable.
@@ -371,7 +376,6 @@ def export_docx(
         section.right_margin = Cm(1.8)
 
     # ─── Cover page ───
-    # Title
     title = doc.add_heading("Penetration Test Report", level=0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
@@ -410,78 +414,142 @@ def export_docx(
 
     doc.add_page_break()
 
-    # ─── 1. Executive Summary ───
-    doc.add_heading("1. Executive Summary", level=1)
-    _add_md_content(doc, executive_summary or "N/A")
+    if narrative_md:
+        # ─── NARRATIVE MODE: render the LLM report as the body ───
+        # Strip HTML comments (theme metadata)
+        import re as _re
+        clean_narrative = _re.sub(r'<!--.*?-->', '', narrative_md, flags=_re.DOTALL)
+        _add_md_content(doc, clean_narrative)
 
-    # ─── 2. Scope ───
-    doc.add_heading("2. Scope", level=1)
-    p = doc.add_paragraph()
-    run = p.add_run("Mission Scope: ")
-    run.bold = True
-    p.add_run(mission_scope or "N/A")
+        # ─── Appendices ───
+        doc.add_page_break()
+        doc.add_heading("Appendix A: Findings Summary Table", level=1)
+        _add_findings_table(doc, findings)
 
-    p = doc.add_paragraph()
-    run = p.add_run("Internal Scope: ")
-    run.bold = True
-    p.add_run(internal_scope or "N/A")
-
-    p = doc.add_paragraph()
-    run = p.add_run("Rules of Engagement: ")
-    run.bold = True
-    p.add_run(roe or "N/A")
-
-    doc.add_heading("Targets Tested", level=3)
-    if targets:
-        for t in targets:
-            doc.add_paragraph(t, style='List Bullet')
-    else:
-        doc.add_paragraph("No targets listed.")
-
-    # ─── 3. Findings Summary ───
-    doc.add_heading("3. Findings Summary", level=1)
-    _add_findings_table(doc, findings)
-
-    # ─── 4. Detailed Findings ───
-    doc.add_heading("4. Detailed Findings", level=1)
-    if findings:
-        for i, f in enumerate(findings):
-            _add_finding_detail(doc, f, i)
-    else:
-        p = doc.add_paragraph("No detailed findings recorded.")
-        p.runs[0].italic = True
-
-    # ─── 5. Engagement Flow ───
-    doc.add_heading("5. Engagement Flow", level=1)
-    _add_md_content(doc, engagement_flow or "N/A")
-
-    # ─── 6. Critical Findings ───
-    doc.add_heading("6. Critical Findings", level=1)
-    if critical_findings:
-        for cf in critical_findings:
-            bot = cf.get("bot", "").upper()
-            cvss = cf.get("cvss", "")
-            target = cf.get("target", "")
-            finding_text = cf.get("finding", "")
+        # Evidence hashes appendix
+        has_evidence = any(f.get("evidence_hash") for f in findings)
+        if has_evidence:
+            doc.add_heading("Appendix B: Evidence Chain (SHA-256)", level=1)
             doc.add_paragraph(
-                f"[{bot}] CVSS {cvss} on {target}: {finding_text}",
-                style='List Bullet'
+                "Each finding is backed by SHA-256 hashed evidence artifacts. "
+                "The evidence locker manifest is tamper-detectable."
             )
+            ev_table = doc.add_table(rows=1, cols=2)
+            ev_table.style = 'Table Grid'
+            _set_cell_text(ev_table.rows[0].cells[0], "Finding ID", bold=True, white_text=True, font_size=9)
+            _set_cell_text(ev_table.rows[0].cells[1], "Evidence SHA-256", bold=True, white_text=True, font_size=9)
+            _shade_cell(ev_table.rows[0].cells[0], "1E3A5F")
+            _shade_cell(ev_table.rows[0].cells[1], "1E3A5F")
+            for f in findings:
+                eh = f.get("evidence_hash")
+                if eh:
+                    row = ev_table.add_row()
+                    _set_cell_text(row.cells[0], f.get("id", ""), bold=True, font_size=9)
+                    _set_cell_text(row.cells[1], eh[:32] + "...", font_size=9)
+
+        # Compliance mapping appendix
+        has_compliance = any(
+            f.get("compliance", {}).get("compliance") for f in findings
+        )
+        if has_compliance:
+            doc.add_heading("Appendix C: Compliance Mapping", level=1)
+            doc.add_paragraph(
+                "Findings mapped to OWASP ASVS 4.0, PCI DSS 4.0, "
+                "ISO 27001:2022, and NIST 800-53 Rev 5."
+            )
+            for f in findings:
+                compliance = f.get("compliance", {})
+                mappings = compliance.get("compliance", {})
+                if not mappings:
+                    continue
+                doc.add_heading(f"{f.get('id', '')}: {f.get('title', '')}", level=3)
+                comp_table = doc.add_table(rows=1, cols=3)
+                comp_table.style = 'Table Grid'
+                for j, header in enumerate(["Framework", "Control ID", "Control Name"]):
+                    cell = comp_table.rows[0].cells[j]
+                    _shade_cell(cell, "475569")
+                    _set_cell_text(cell, header, bold=True, white_text=True, font_size=9)
+                for fw_name, controls in mappings.items():
+                    for ctrl in controls:
+                        row = comp_table.add_row()
+                        _set_cell_text(row.cells[0], fw_name, bold=True, font_size=9)
+                        _set_cell_text(row.cells[1], ctrl["control_id"], font_size=9)
+                        _set_cell_text(row.cells[2], ctrl["control_name"], font_size=9)
+
     else:
-        p = doc.add_paragraph("No critical findings (CVSS >= 7.0) recorded.")
-        p.runs[0].italic = True
+        # ─── STRUCTURED MODE: fallback (backward compat) ───
+        # 1. Executive Summary
+        doc.add_heading("1. Executive Summary", level=1)
+        _add_md_content(doc, executive_summary or "N/A")
 
-    # ─── 7. Decision Audit Trail ───
-    doc.add_heading("7. Decision Audit Trail", level=1)
-    _add_md_content(doc, decision_audit or "N/A")
+        # 2. Scope
+        doc.add_heading("2. Scope", level=1)
+        p = doc.add_paragraph()
+        run = p.add_run("Mission Scope: ")
+        run.bold = True
+        p.add_run(mission_scope or "N/A")
 
-    # ─── 8. Cleanup Status ───
-    doc.add_heading("8. Cleanup Status", level=1)
-    _add_md_content(doc, cleanup_status)
+        p = doc.add_paragraph()
+        run = p.add_run("Internal Scope: ")
+        run.bold = True
+        p.add_run(internal_scope or "N/A")
 
-    # ─── 9. Mission Outcome ───
-    doc.add_heading("9. Mission Outcome", level=1)
-    _add_md_content(doc, mission_outcome or "N/A")
+        p = doc.add_paragraph()
+        run = p.add_run("Rules of Engagement: ")
+        run.bold = True
+        p.add_run(roe or "N/A")
+
+        doc.add_heading("Targets Tested", level=3)
+        if targets:
+            for t in targets:
+                doc.add_paragraph(t, style='List Bullet')
+        else:
+            doc.add_paragraph("No targets listed.")
+
+        # 3. Findings Summary
+        doc.add_heading("3. Findings Summary", level=1)
+        _add_findings_table(doc, findings)
+
+        # 4. Detailed Findings
+        doc.add_heading("4. Detailed Findings", level=1)
+        if findings:
+            for i, f in enumerate(findings):
+                _add_finding_detail(doc, f, i)
+        else:
+            p = doc.add_paragraph("No detailed findings recorded.")
+            p.runs[0].italic = True
+
+        # 5. Engagement Flow
+        doc.add_heading("5. Engagement Flow", level=1)
+        _add_md_content(doc, engagement_flow or "N/A")
+
+        # 6. Critical Findings
+        doc.add_heading("6. Critical Findings", level=1)
+        if critical_findings:
+            for cf in critical_findings:
+                bot = cf.get("bot", "").upper()
+                cvss = cf.get("cvss", "")
+                target = cf.get("target", "")
+                finding_text = cf.get("finding", "")
+                doc.add_paragraph(
+                    f"[{bot}] CVSS {cvss} on {target}: {finding_text}",
+                    style='List Bullet'
+                )
+        else:
+            p = doc.add_paragraph("No critical findings (CVSS >= 7.0) recorded.")
+            p.runs[0].italic = True
+
+        # 7. Decision Audit Trail
+        doc.add_heading("7. Decision Audit Trail", level=1)
+        _add_md_content(doc, decision_audit or "N/A")
+
+        # 8. Cleanup Status
+        doc.add_heading("8. Cleanup Status", level=1)
+        _add_md_content(doc, cleanup_status)
+
+        # 9. Mission Outcome
+        doc.add_heading("9. Mission Outcome", level=1)
+        _add_md_content(doc, mission_outcome or "N/A")
 
     # ─── Footer ───
     doc.add_paragraph()  # spacer

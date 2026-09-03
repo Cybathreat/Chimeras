@@ -1,0 +1,29 @@
+Command: dig SOA cyberian-defenses.com
+Exit Code: 0
+Duration: 0.2s
+Timestamp: 2026-09-02T21:46:35Z
+============================================================
+STDOUT:
+
+; <<>> DiG 9.20.27-1-Debian <<>> SOA cyberian-defenses.com
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 4614
+;; flags: qr rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;cyberian-defenses.com.		IN	SOA
+
+;; ANSWER SECTION:
+cyberian-defenses.com.	56	IN	SOA	ns1.systemdns.com. hostmaster.systemdns.com. 1779738611 10800 3600 1209600 60
+
+;; Query time: 2 msec
+;; SERVER: 153.92.2.6#53(153.92.2.6) (UDP)
+;; WHEN: Wed Sep 02 21:46:35 UTC 2026
+;; MSG SIZE  rcvd: 111
+
+============================================================
+STDERR:
+(empty)

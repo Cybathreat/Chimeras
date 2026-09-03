@@ -1,0 +1,10 @@
+Command: whatweb -a 3 https://cyberian-defenses.com
+Exit Code: 0
+Duration: 5.41s
+Timestamp: 2026-09-02T22:11:54Z
+============================================================
+STDOUT:
+[1m[34mhttps://cyberian-defenses.com/[0m [200 OK] [1mCountry[0m[[0m[22mUNITED STATES[0m][[1m[31mUS[0m], [1mEmail[0m[[0m[22mahmed.chiboub@cyberian-defenses.com[0m], [1mHTML5[0m, [1mHTTPServer[0m[[1m[31mUbuntu Linux[0m][[1m[36mnginx/1.24.0 (Ubuntu)[0m], [1mIP[0m[[0m[22m76.13.46.223[0m], [1mMeta-Author[0m[[0m[22mAhmed Chiboub[0m], [1mOpen-Graph-Protocol[0m[[1m[32mwebsite[0m], [1mScript[0m[[0m[22mapplication/ld+json[0m], [1mStrict-Transport-Security[0m[[0m[22mmax-age=63072000; includeSubDomains; preload[0m], [1mTitle[0m[[1m[33mCyberian Defenses | Cybersecurity Advisory — MENA & Africa[0m], [1mUncommonHeaders[0m[[0m[22mx-content-type-options,referrer-policy,permissions-policy,content-security-policy[0m], [1mX-Frame-Options[0m[[0m[22mSAMEORIGIN[0m], [1mX-XSS-Protection[0m[[0m[22m1; mode=block[0m], [1mnginx[0m[[1m[32m1.24.0[0m]
+============================================================
+STDERR:
+(empty)

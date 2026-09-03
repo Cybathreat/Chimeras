@@ -1,0 +1,1 @@
+Lisa cycle 2 reported SSH password authentication enabled. OpenSSH 9.6p1 on port 22.

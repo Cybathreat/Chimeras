@@ -1,0 +1,10 @@
+Command: host jira.cyberian-defenses.com
+Exit Code: 1
+Duration: 0.27s
+Timestamp: 2026-09-02T21:55:21Z
+============================================================
+STDOUT:
+Host jira.cyberian-defenses.com not found: 3(NXDOMAIN)
+============================================================
+STDERR:
+(empty)

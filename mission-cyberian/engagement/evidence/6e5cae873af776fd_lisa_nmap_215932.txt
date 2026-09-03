@@ -1,0 +1,24 @@
+Command: nmap -sS -sV -O -T3 -p 1-1000 --version-intensity 5 76.13.46.223
+Exit Code: 0
+Duration: 21.77s
+Timestamp: 2026-09-02T21:59:32Z
+============================================================
+STDOUT:
+Starting Nmap 7.99 ( https://nmap.org ) at 2026-09-02 21:59 +0000
+Nmap scan report for srv1479954.hstgr.cloud (76.13.46.223)
+Host is up (0.00014s latency).
+Not shown: 997 filtered tcp ports (no-response)
+PORT    STATE SERVICE  VERSION
+22/tcp  open  ssh      OpenSSH 9.6p1 Ubuntu 3ubuntu13.18 (Ubuntu Linux; protocol 2.0)
+80/tcp  open  http     nginx 1.24.0 (Ubuntu)
+443/tcp open  ssl/http nginx 1.24.0 (Ubuntu)
+Warning: OSScan results may be unreliable because we could not find at least 1 open and 1 closed port
+Aggressive OS guesses: Linux 4.15 - 5.19 (97%), Linux 4.19 (97%), Linux 5.0 - 5.14 (97%), OpenWrt 21.02 (Linux 5.4) (97%), MikroTik RouterOS 7.2 - 7.5 (Linux 5.6.3) (97%), Linux 6.0 (95%), Linux 6.15 (94%), Linux 5.4 - 5.10 (91%), Linux 2.6.32 (91%), Linux 2.6.32 - 3.13 (91%)
+No exact OS matches for host (test conditions non-ideal).
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+
+OS and Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 21.15 seconds
+============================================================
+STDERR:
+(empty)

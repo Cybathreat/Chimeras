@@ -1,0 +1,26 @@
+Command: nmap -sV -T3 --script=http-vhosts -p 80,443 76.13.46.223
+Exit Code: 0
+Duration: 13.02s
+Timestamp: 2026-09-02T22:03:58Z
+============================================================
+STDOUT:
+Starting Nmap 7.99 ( https://nmap.org ) at 2026-09-02 22:03 +0000
+Nmap scan report for srv1479954.hstgr.cloud (76.13.46.223)
+Host is up (0.000059s latency).
+
+PORT    STATE SERVICE  VERSION
+80/tcp  open  http     nginx 1.24.0 (Ubuntu)
+| http-vhosts: 
+|_128 names had status 404
+|_http-server-header: nginx/1.24.0 (Ubuntu)
+443/tcp open  ssl/http nginx 1.24.0 (Ubuntu)
+|_http-server-header: nginx/1.24.0 (Ubuntu)
+| http-vhosts: 
+|_128 names had status 200
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 12.91 seconds
+============================================================
+STDERR:
+(empty)

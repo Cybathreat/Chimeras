@@ -1,0 +1,47 @@
+Command: nmap -sV -T3 --script=ssl-cert,ssl-enum-ciphers -p 443 76.13.46.223
+Exit Code: 0
+Duration: 12.52s
+Timestamp: 2026-09-02T22:03:26Z
+============================================================
+STDOUT:
+Starting Nmap 7.99 ( https://nmap.org ) at 2026-09-02 22:03 +0000
+Nmap scan report for srv1479954.hstgr.cloud (76.13.46.223)
+Host is up (0.000063s latency).
+
+PORT    STATE SERVICE  VERSION
+443/tcp open  ssl/http nginx 1.24.0 (Ubuntu)
+| ssl-cert: Subject: commonName=cyberian-defenses.com
+| Subject Alternative Name: DNS:cyberian-defenses.com, DNS:www.cyberian-defenses.com
+| Issuer: commonName=YE2/organizationName=Let's Encrypt/countryName=US
+| Public Key type: ec
+| Public Key bits: 256
+| Signature Algorithm: ecdsa-with-SHA384
+| Not valid before: 2026-07-25T02:02:05
+| Not valid after:  2026-10-23T02:02:04
+| MD5:     290e ae2c 1a35 0b86 ef91 8ced 5c06 8779
+| SHA-1:   d7ec f524 ac98 d052 7c68 2275 8b93 f463 f751 1afa
+|_SHA-256: deec 71bf 9bda ec03 28c7 e99b 9734 b453 a0a0 5551 fe79 e051 310f 1525 8da3 3f89
+|_http-server-header: nginx/1.24.0 (Ubuntu)
+| ssl-enum-ciphers: 
+|   TLSv1.2: 
+|     ciphers: 
+|       TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 (secp256r1) - A
+|       TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 (secp256r1) - A
+|       TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256 (secp256r1) - A
+|     compressors: 
+|       NULL
+|     cipher preference: client
+|   TLSv1.3: 
+|     ciphers: 
+|       TLS_AKE_WITH_AES_128_GCM_SHA256 (ecdh_x25519) - A
+|       TLS_AKE_WITH_AES_256_GCM_SHA384 (ecdh_x25519) - A
+|       TLS_AKE_WITH_CHACHA20_POLY1305_SHA256 (ecdh_x25519) - A
+|     cipher preference: client
+|_  least strength: A
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 12.42 seconds
+============================================================
+STDERR:
+(empty)

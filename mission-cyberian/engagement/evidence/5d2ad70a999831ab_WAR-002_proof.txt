@@ -1,0 +1,1 @@
+CSP header: script-src includes 'unsafe-inline'. Blog pages (/blog/) and formspree.io form are potential injection vectors untested.

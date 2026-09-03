@@ -411,6 +411,10 @@ a { color: #2563eb; text-decoration: none; }
     font-size: 9.5pt;
 }
 
+.page-break {
+    page-break-before: always;
+}
+
 .toc {
     page-break-after: always;
 }
@@ -614,6 +618,11 @@ def _build_toc(findings: List[Dict[str, Any]]) -> str:
     """
 
 
+def _strip_html_comments(text: str) -> str:
+    """Strip HTML comments from markdown (e.g., theme metadata blocks)."""
+    return re.sub(r'<!--.*?-->', '', text, flags=re.DOTALL)
+
+
 def export_pdf(
     output_path: Path,
     engagement_name: str = "N/A",
@@ -629,14 +638,22 @@ def export_pdf(
     decision_audit: str = "",
     cleanup_status: str = "No cleanup performed.",
     mission_outcome: str = "",
+    narrative_md: str = "",
 ) -> bool:
     """Export a professional pentest report to PDF.
 
-    Uses the same data structure as core/report_template.py:render_report.
-    Falls back gracefully if WeasyPrint is not installed (returns False).
+    When narrative_md is provided, the PDF renders the LLM-written narrative
+    as the primary body — this is the real pentest report with attack stories,
+    business impact, and PoC details. Evidence hashes and compliance mappings
+    are appended as appendices. This produces a consultant-grade report, not
+    a scanner data dump.
+
+    When narrative_md is empty, falls back to structured finding cards
+    (backward compatibility for tests / non-LLM pipelines).
 
     Args:
         output_path: Where to write the PDF file.
+        narrative_md: LLM-generated report markdown (final_report.md content).
         See render_report() for other args.
 
     Returns:
@@ -658,7 +675,7 @@ def export_pdf(
         if (f.get("severity", "") or "").lower() == "critical"
     )
 
-    # Build the full HTML document
+    # ─── Build the full HTML document ───
     html_parts = [
         "<html><head><meta charset='utf-8'></head><body>",
         # Cover page
@@ -666,60 +683,124 @@ def export_pdf(
             engagement_name, client_name, report_date,
             targets, len(findings), critical_count,
         ),
-        # Table of contents
-        _build_toc(findings),
-        # Executive Summary
-        "<h1>1. Executive Summary</h1>",
-        _md_block_to_html(executive_summary or "N/A"),
-        # Scope
-        "<h1>2. Scope</h1>",
-        f"<p><strong>Mission Scope:</strong> {_md_inline_to_html(mission_scope or 'N/A')}</p>",
-        f"<p><strong>Internal Scope:</strong> {_md_inline_to_html(internal_scope or 'N/A')}</p>",
-        f"<p><strong>Rules of Engagement:</strong> {_md_inline_to_html(roe or 'N/A')}</p>",
-        "<h3>Targets Tested</h3>" if targets else "",
-        "<ul>" + "".join(f"<li>{_escape_html(t)}</li>" for t in targets) + "</ul>" if targets else "<p><em>No targets listed.</em></p>",
-        # Findings Summary Table
-        "<h1>3. Findings Summary</h1>",
-        _build_findings_table(findings),
-        # Detailed Findings
-        "<h1>4. Detailed Findings</h1>",
     ]
 
-    for i, f in enumerate(findings):
-        html_parts.append(_build_finding_card(f, i))
+    if narrative_md:
+        # ─── NARRATIVE MODE: render the LLM report as the body ───
+        # Strip HTML comments (theme metadata, internal notes)
+        clean_narrative = _strip_html_comments(narrative_md)
+        # Convert the full narrative markdown to HTML
+        narrative_html = _md_block_to_html(clean_narrative)
+        html_parts.append(narrative_html)
 
-    if not findings:
-        html_parts.append("<p><em>No detailed findings recorded.</em></p>")
+        # ─── Appendices ───
+        html_parts.append("<div class='page-break'></div>")
+        html_parts.append("<h1>Appendix A: Findings Summary Table</h1>")
+        html_parts.append(_build_findings_table(findings))
 
-    # Engagement Flow
-    html_parts.append("<h1>5. Engagement Flow</h1>")
-    html_parts.append(_md_block_to_html(engagement_flow or "N/A"))
+        # Evidence hashes appendix
+        has_evidence = any(f.get("evidence_hash") for f in findings)
+        if has_evidence:
+            html_parts.append("<h1>Appendix B: Evidence Chain (SHA-256)</h1>")
+            html_parts.append(
+                "<p>Each finding is backed by SHA-256 hashed evidence artifacts. "
+                "The evidence locker manifest is tamper-detectable.</p>"
+            )
+            ev_rows = []
+            for f in findings:
+                eh = f.get("evidence_hash")
+                if eh:
+                    fid = _escape_html(f.get("id", ""))
+                    ev_rows.append(
+                        f"<tr><td><strong>{fid}</strong></td>"
+                        f"<td><code>{_escape_html(eh[:32])}...</code></td></tr>"
+                    )
+            if ev_rows:
+                html_parts.append(
+                    f"<table><tr><th>Finding ID</th><th>Evidence SHA-256</th></tr>"
+                    f"{''.join(ev_rows)}</table>"
+                )
 
-    # Critical Findings
-    html_parts.append("<h1>6. Critical Findings</h1>")
-    if critical_findings:
-        items = []
-        for cf in critical_findings:
-            bot = _escape_html(cf.get("bot", "").upper())
-            cvss = _escape_html(str(cf.get("cvss", "")))
-            target = _escape_html(cf.get("target", ""))
-            finding = _escape_html(cf.get("finding", ""))
-            items.append(f"<li><strong>[{bot}]</strong> CVSS {cvss} on {target}: {finding}</li>")
-        html_parts.append(f"<ul>{''.join(items)}</ul>")
+        # Compliance mapping appendix
+        has_compliance = any(
+            f.get("compliance", {}).get("compliance") for f in findings
+        )
+        if has_compliance:
+            html_parts.append("<h1>Appendix C: Compliance Mapping</h1>")
+            html_parts.append(
+                "<p>Findings mapped to OWASP ASVS 4.0, PCI DSS 4.0, "
+                "ISO 27001:2022, and NIST 800-53 Rev 5.</p>"
+            )
+            for f in findings:
+                compliance = f.get("compliance", {})
+                mappings = compliance.get("compliance", {})
+                if not mappings:
+                    continue
+                fid = _escape_html(f.get("id", ""))
+                title = _escape_html(f.get("title", ""))
+                html_parts.append(f"<h3>{fid}: {title}</h3>")
+                comp_rows = []
+                for fw_name, controls in mappings.items():
+                    for ctrl in controls:
+                        comp_rows.append(
+                            f"<tr><td><strong>{_escape_html(fw_name)}</strong></td>"
+                            f"<td>{_escape_html(ctrl['control_id'])}</td>"
+                            f"<td>{_escape_html(ctrl['control_name'])}</td></tr>"
+                        )
+                if comp_rows:
+                    html_parts.append(
+                        f"<table class='md-table'>"
+                        f"<tr><th>Framework</th><th>Control ID</th><th>Control Name</th></tr>"
+                        f"{''.join(comp_rows)}</table>"
+                    )
+
     else:
-        html_parts.append("<p><em>No critical findings (CVSS >= 7.0) recorded.</em></p>")
-
-    # Decision Audit Trail
-    html_parts.append("<h1>7. Decision Audit Trail</h1>")
-    html_parts.append(_md_block_to_html(decision_audit or "N/A"))
-
-    # Cleanup Status
-    html_parts.append("<h1>8. Cleanup Status</h1>")
-    html_parts.append(_md_block_to_html(cleanup_status))
-
-    # Mission Outcome
-    html_parts.append("<h1>9. Mission Outcome</h1>")
-    html_parts.append(_md_block_to_html(mission_outcome or "N/A"))
+        # ─── STRUCTURED MODE: fallback to finding cards (backward compat) ───
+        html_parts.append(_build_toc(findings))
+        # Executive Summary
+        html_parts.append("<h1>1. Executive Summary</h1>")
+        html_parts.append(_md_block_to_html(executive_summary or "N/A"))
+        # Scope
+        html_parts.append("<h1>2. Scope</h1>")
+        html_parts.append(f"<p><strong>Mission Scope:</strong> {_md_inline_to_html(mission_scope or 'N/A')}</p>")
+        html_parts.append(f"<p><strong>Internal Scope:</strong> {_md_inline_to_html(internal_scope or 'N/A')}</p>")
+        html_parts.append(f"<p><strong>Rules of Engagement:</strong> {_md_inline_to_html(roe or 'N/A')}</p>")
+        html_parts.append("<h3>Targets Tested</h3>" if targets else "")
+        html_parts.append("<ul>" + "".join(f"<li>{_escape_html(t)}</li>" for t in targets) + "</ul>" if targets else "<p><em>No targets listed.</em></p>")
+        # Findings Summary Table
+        html_parts.append("<h1>3. Findings Summary</h1>")
+        html_parts.append(_build_findings_table(findings))
+        # Detailed Findings
+        html_parts.append("<h1>4. Detailed Findings</h1>")
+        for i, f in enumerate(findings):
+            html_parts.append(_build_finding_card(f, i))
+        if not findings:
+            html_parts.append("<p><em>No detailed findings recorded.</em></p>")
+        # Engagement Flow
+        html_parts.append("<h1>5. Engagement Flow</h1>")
+        html_parts.append(_md_block_to_html(engagement_flow or "N/A"))
+        # Critical Findings
+        html_parts.append("<h1>6. Critical Findings</h1>")
+        if critical_findings:
+            items = []
+            for cf in critical_findings:
+                bot = _escape_html(cf.get("bot", "").upper())
+                cvss = _escape_html(str(cf.get("cvss", "")))
+                target = _escape_html(cf.get("target", ""))
+                finding = _escape_html(cf.get("finding", ""))
+                items.append(f"<li><strong>[{bot}]</strong> CVSS {cvss} on {target}: {finding}</li>")
+            html_parts.append(f"<ul>{''.join(items)}</ul>")
+        else:
+            html_parts.append("<p><em>No critical findings (CVSS >= 7.0) recorded.</em></p>")
+        # Decision Audit Trail
+        html_parts.append("<h1>7. Decision Audit Trail</h1>")
+        html_parts.append(_md_block_to_html(decision_audit or "N/A"))
+        # Cleanup Status
+        html_parts.append("<h1>8. Cleanup Status</h1>")
+        html_parts.append(_md_block_to_html(cleanup_status))
+        # Mission Outcome
+        html_parts.append("<h1>9. Mission Outcome</h1>")
+        html_parts.append(_md_block_to_html(mission_outcome or "N/A"))
 
     # Footer
     html_parts.append(

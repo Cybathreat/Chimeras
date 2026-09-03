@@ -1,0 +1,1 @@
+SSH MAC algorithms include hmac-sha1 alongside stronger options like hmac-sha2-256.

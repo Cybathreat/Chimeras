@@ -1,0 +1,19 @@
+Command: nmap -p 80,443 --script http-waf-detect,http-waf-fingerprint -Pn cyberian-defenses.com
+Exit Code: 0
+Duration: 1.15s
+Timestamp: 2026-09-02T22:18:36Z
+============================================================
+STDOUT:
+Starting Nmap 7.99 ( https://nmap.org ) at 2026-09-02 22:18 +0000
+Nmap scan report for cyberian-defenses.com (76.13.46.223)
+Host is up (0.000056s latency).
+rDNS record for 76.13.46.223: srv1479954.hstgr.cloud
+
+PORT    STATE SERVICE
+80/tcp  open  http
+443/tcp open  https
+
+Nmap done: 1 IP address (1 host up) scanned in 0.79 seconds
+============================================================
+STDERR:
+(empty)

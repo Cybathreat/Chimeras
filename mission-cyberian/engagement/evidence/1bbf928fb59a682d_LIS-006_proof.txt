@@ -1,0 +1,1 @@
+53/udp open|filtered domain; 123/udp open|filtered ntp; 161/udp open|filtered snmp; all 10 ports open|filtered.

@@ -1,0 +1,17 @@
+Command: curl -sI http://cyberian-defenses.com
+Exit Code: 0
+Duration: 0.14s
+Timestamp: 2026-09-02T21:48:11Z
+============================================================
+STDOUT:
+HTTP/1.1 301 Moved Permanently
+Server: nginx/1.24.0 (Ubuntu)
+Date: Wed, 02 Sep 2026 21:48:11 GMT
+Content-Type: text/html
+Content-Length: 178
+Connection: keep-alive
+Location: https://cyberian-defenses.com/
+
+============================================================
+STDERR:
+(empty)

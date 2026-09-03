@@ -1,0 +1,1 @@
+HTTPServer[Ubuntu Linux][nginx/1.24.0 (Ubuntu)] - version disclosed in response headers.

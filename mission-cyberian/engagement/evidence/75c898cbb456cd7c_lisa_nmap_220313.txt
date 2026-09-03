@@ -1,0 +1,56 @@
+Command: nmap -sV -T3 --script=http-title,http-headers,http-enum -p 80,443,8080,8443 76.13.46.223
+Exit Code: 0
+Duration: 39.16s
+Timestamp: 2026-09-02T22:03:13Z
+============================================================
+STDOUT:
+Starting Nmap 7.99 ( https://nmap.org ) at 2026-09-02 22:02 +0000
+Nmap scan report for srv1479954.hstgr.cloud (76.13.46.223)
+Host is up (0.000092s latency).
+
+PORT     STATE    SERVICE    VERSION
+80/tcp   open     http       nginx 1.24.0 (Ubuntu)
+| http-headers: 
+|   Server: nginx/1.24.0 (Ubuntu)
+|   Date: Wed, 02 Sep 2026 22:02:48 GMT
+|   Content-Type: text/html
+|   Content-Length: 162
+|   Connection: close
+|   
+|_  (Request type: GET)
+|_http-server-header: nginx/1.24.0 (Ubuntu)
+|_http-title: 404 Not Found
+443/tcp  open     ssl/http   nginx 1.24.0 (Ubuntu)
+|_http-server-header: nginx/1.24.0 (Ubuntu)
+|_http-title: Cyberian Defenses | Cybersecurity Advisory \xE2\x80\x94 MENA & Africa
+| http-headers: 
+|   Server: nginx/1.24.0 (Ubuntu)
+|   Date: Wed, 02 Sep 2026 22:02:48 GMT
+|   Content-Type: text/html
+|   Content-Length: 18860
+|   Last-Modified: Mon, 24 Aug 2026 05:34:19 GMT
+|   Connection: close
+|   Vary: Accept-Encoding
+|   ETag: "6a8bd7db-49ac"
+|   Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+|   X-Content-Type-Options: nosniff
+|   X-Frame-Options: SAMEORIGIN
+|   X-XSS-Protection: 1; mode=block
+|   Referrer-Policy: strict-origin-when-cross-origin
+|   Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
+|   Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' cdn.tailwindcss.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://formspree.io; frame-ancestors 'self'; form-action 'self' https://formspree.io;
+|   Accept-Ranges: bytes
+|   
+|_  (Request type: HEAD)
+| http-enum: 
+|   /blog/: Blog
+|_  /robots.txt: Robots file
+8080/tcp filtered http-proxy
+8443/tcp filtered https-alt
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 38.99 seconds
+============================================================
+STDERR:
+(empty)

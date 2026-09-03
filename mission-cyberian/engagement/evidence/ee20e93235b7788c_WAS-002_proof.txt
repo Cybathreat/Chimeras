@@ -1,0 +1,1 @@
+403 162 — .git/HEAD returns 403 with 162 bytes body. Same for .git/config and .env.

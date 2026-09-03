@@ -1,0 +1,1 @@
+Lisa cycle 1 and 2 reported CSP with unsafe-inline in script-src or default-src.

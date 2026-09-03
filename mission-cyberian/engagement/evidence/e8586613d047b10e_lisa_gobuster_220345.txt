@@ -1,0 +1,10 @@
+Command: gobuster dir -u https://cyberian-defenses.com -w /usr/share/wordlists/dirb/common.txt -t 10 -k
+Exit Code: 1
+Duration: 0.11s
+Timestamp: 2026-09-02T22:03:45Z
+============================================================
+STDOUT:
+(empty)
+============================================================
+STDERR:
+2026/09/02 22:03:45 wordlist file "/usr/share/wordlists/dirb/common.txt" does not exist: stat /usr/share/wordlists/dirb/common.txt: no such file or directory

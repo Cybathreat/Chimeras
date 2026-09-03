@@ -1,0 +1,10 @@
+Command: host portal.cyberian-defenses.com
+Exit Code: 1
+Duration: 0.28s
+Timestamp: 2026-09-02T21:55:17Z
+============================================================
+STDOUT:
+Host portal.cyberian-defenses.com not found: 3(NXDOMAIN)
+============================================================
+STDERR:
+(empty)

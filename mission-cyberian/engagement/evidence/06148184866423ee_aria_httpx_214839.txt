@@ -1,0 +1,20 @@
+Command: httpx -u https://cyberian-defenses.com -title -tech-detect -status-code -content-length
+Exit Code: 0
+Duration: 7.64s
+Timestamp: 2026-09-02T21:48:39Z
+============================================================
+STDOUT:
+https://cyberian-defenses.com [[32m200[0m] [[35m18860[0m] [[36mCyberian Defenses | Cybersecurity Advisory — MENA & Africa[0m] [[35mHSTS,Nginx:1.24.0,Tailwind CSS,Ubuntu[0m]
+============================================================
+STDERR:
+
+    __    __  __       _  __
+   / /_  / /_/ /_____ | |/ /
+  / __ \/ __/ __/ __ \|   /
+ / / / / /_/ /_/ /_/ /   |
+/_/ /_/\__/\__/ .___/_/|_|
+             /_/
+
+		projectdiscovery.io
+
+[[93mWRN[0m] UI Dashboard is disabled, Use -dashboard option to enable

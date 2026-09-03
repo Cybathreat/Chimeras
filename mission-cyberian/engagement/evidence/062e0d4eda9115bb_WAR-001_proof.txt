@@ -1,0 +1,1 @@
+Nmap: OpenSSH 9.6p1 Ubuntu on port 22. CVE-2024-6387 affects 8.5p1<=9.7p1. Ubuntu backport patch unverified — theoretical only.

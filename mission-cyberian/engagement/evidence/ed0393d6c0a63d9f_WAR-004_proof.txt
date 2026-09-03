@@ -1,0 +1,1 @@
+azureedge.net domain referenced in DNS/infra. Tool blocked from probing it as out of scope, but presence confirmed.

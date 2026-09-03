@@ -1,0 +1,32 @@
+Command: dig ANY cyberian-defenses.com
+Exit Code: 0
+Duration: 30.29s
+Timestamp: 2026-09-02T21:47:07Z
+============================================================
+STDOUT:
+;; Connection to 153.92.2.6#53(153.92.2.6) for cyberian-defenses.com failed: timed out.
+;; no servers could be reached
+;; Connection to 153.92.2.6#53(153.92.2.6) for cyberian-defenses.com failed: timed out.
+;; no servers could be reached
+;; Connection to 153.92.2.6#53(153.92.2.6) for cyberian-defenses.com failed: timed out.
+
+; <<>> DiG 9.20.27-1-Debian <<>> ANY cyberian-defenses.com
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOTIMP, id: 48644
+;; flags: qr rd ra; QUERY: 1, ANSWER: 0, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+; EDE: 21 (Not Supported)
+;; QUESTION SECTION:
+;cyberian-defenses.com.		IN	ANY
+
+;; Query time: 2 msec
+;; SERVER: 1.1.1.1#53(1.1.1.1) (TCP)
+;; WHEN: Wed Sep 02 21:47:07 UTC 2026
+;; MSG SIZE  rcvd: 56
+
+============================================================
+STDERR:
+(empty)

@@ -1,0 +1,18 @@
+Command: nmap -sS -T3 -p 3000,4200,5000,5601,6379,7001,7077,8000,8008,8080,8081,8082,8083,8088,8181,8443,8444,8880,8888,9000,9090,9100,9200,9300,9999,10000,10250,11211,15672,1883,3306,4443,50000,5432,5500,6443,7474,27017 -sV cyberian-defenses.com
+Exit Code: 0
+Duration: 2.78s
+Timestamp: 2026-09-02T22:09:16Z
+============================================================
+STDOUT:
+Starting Nmap 7.99 ( https://nmap.org ) at 2026-09-02 22:09 +0000
+Nmap scan report for cyberian-defenses.com (76.13.46.223)
+Host is up (0.000069s latency).
+rDNS record for 76.13.46.223: srv1479954.hstgr.cloud
+All 38 scanned ports on cyberian-defenses.com (76.13.46.223) are in ignored states.
+Not shown: 38 filtered tcp ports (no-response)
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 2.58 seconds
+============================================================
+STDERR:
+(empty)

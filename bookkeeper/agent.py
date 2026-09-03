@@ -290,6 +290,7 @@ Respond with the complete report as markdown. Do NOT wrap in JSON. Do NOT wrap i
                         decision_audit=decision_log_text,
                         cleanup_status=cleanup_status,
                         mission_outcome=mission_outcome,
+                        narrative_md=report_text,
                     )
                     self._log(f"PDF exported: {len(structured_findings)} findings → {pdf_path.name}", "PDF")
                 except Exception as e:
@@ -313,6 +314,7 @@ Respond with the complete report as markdown. Do NOT wrap in JSON. Do NOT wrap i
                         decision_audit=decision_log_text,
                         cleanup_status=cleanup_status,
                         mission_outcome=mission_outcome,
+                        narrative_md=report_text,
                     )
                     self._log(f"DOCX exported: {len(structured_findings)} findings → {docx_path.name}", "DOCX")
                 except Exception as e:

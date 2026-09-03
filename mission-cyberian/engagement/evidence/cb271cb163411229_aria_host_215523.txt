@@ -1,0 +1,10 @@
+Command: host ns1.cyberian-defenses.com
+Exit Code: 1
+Duration: 0.44s
+Timestamp: 2026-09-02T21:55:23Z
+============================================================
+STDOUT:
+Host ns1.cyberian-defenses.com not found: 3(NXDOMAIN)
+============================================================
+STDERR:
+(empty)
