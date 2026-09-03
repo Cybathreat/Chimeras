@@ -25,6 +25,8 @@ from core.state import SwarmState
 from core.report_template import render_report
 from core.findings_store import FindingsStore
 from core.sarif_exporter import write_sarif
+from core.pdf_exporter import export_pdf, is_pdf_available
+from core.docx_exporter import export_docx, is_docx_available
 
 
 class Bookkeeper(BaseBot):
@@ -266,6 +268,53 @@ Respond with the complete report as markdown. Do NOT wrap in JSON. Do NOT wrap i
                     self._log(f"SARIF exported: {len(all_findings)} findings → {sarif_path.name}", "SARIF")
                 except Exception as e:
                     self._log(f"SARIF export failed: {e}", "ERROR")
+
+                # v3.1: PDF report export — the client-ready deliverable
+                try:
+                    pdf_path = self.engagement_dir / "report" / "pentest_report.pdf"
+                    export_pdf(
+                        output_path=pdf_path,
+                        engagement_name=mission.get("target", "N/A"),
+                        client_name="",
+                        executive_summary=report_text[:2000],
+                        mission_scope=mission.get("scope", "N/A"),
+                        internal_scope=self.state.get("internal_scope", ""),
+                        roe=mission.get("roe", "N/A"),
+                        targets=targets,
+                        findings=structured_findings,
+                        engagement_flow=engagement_flow,
+                        critical_findings=critical_findings,
+                        decision_audit=decision_log_text,
+                        cleanup_status=cleanup_status,
+                        mission_outcome=mission_outcome,
+                    )
+                    self._log(f"PDF exported: {len(structured_findings)} findings → {pdf_path.name}", "PDF")
+                except Exception as e:
+                    self._log(f"PDF export failed: {e}", "ERROR")
+
+                # v3.1: DOCX report export — for clients who need Word format
+                try:
+                    docx_path = self.engagement_dir / "report" / "pentest_report.docx"
+                    export_docx(
+                        output_path=docx_path,
+                        engagement_name=mission.get("target", "N/A"),
+                        client_name="",
+                        executive_summary=report_text[:2000],
+                        mission_scope=mission.get("scope", "N/A"),
+                        internal_scope=self.state.get("internal_scope", ""),
+                        roe=mission.get("roe", "N/A"),
+                        targets=targets,
+                        findings=structured_findings,
+                        engagement_flow=engagement_flow,
+                        critical_findings=critical_findings,
+                        decision_audit=decision_log_text,
+                        cleanup_status=cleanup_status,
+                        mission_outcome=mission_outcome,
+                    )
+                    self._log(f"DOCX exported: {len(structured_findings)} findings → {docx_path.name}", "DOCX")
+                except Exception as e:
+                    self._log(f"DOCX export failed: {e}", "ERROR")
+
                 self._log(f"Structured report generated: {len(structured_findings)} findings, "
                           f"{len(critical_findings)} critical", "REPORT")
             except Exception as e:
@@ -293,6 +342,10 @@ Respond with the complete report as markdown. Do NOT wrap in JSON. Do NOT wrap i
             self._write_bot_file(
                 f"# {self.bot_name.upper()} — Final Report\n\n"
                 f"Report generated and saved to report/final_report.md\n"
+                f"Structured report: report/structured_report.md\n"
+                f"PDF report: report/pentest_report.pdf\n"
+                f"DOCX report: report/pentest_report.docx\n"
+                f"SARIF export: report/findings.sarif\n"
                 f"Cleanup report: {'report/cleanup_report.md' if artifacts else 'N/A (no artifacts)'}\n"
                 f"Audit JSON: report/engagement_audit.json\n"
             )

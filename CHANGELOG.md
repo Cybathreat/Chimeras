@@ -1,6 +1,21 @@
-# Chimeras v3.0 — Changelog
+# Chimeras v3.1 — Changelog
 
 All notable changes to Chimeras. Dates in Paris time (CEST/UTC+2).
+
+## v3.1 — 2026-09-03
+
+### Added — PDF Report Export
+- **PDF exporter** (`core/pdf_exporter.py`) — WeasyPrint-rendered client-ready PDF. Cover page with dark navy branding, table of contents, CVSS color-coded finding cards (critical=dark red, high=red, medium=amber, low=blue, info=gray), professional typography with A4 page sizing, page numbers, footer branding.
+- **Markdown-to-HTML conversion** — `_md_block_to_html()` handles headings, bullet/numbered lists, code blocks, tables, inline formatting (bold, italic, code, links). All content HTML-escaped.
+- **Bookkeeper integration** — `pentest_report.pdf` generated alongside `structured_report.md`, `findings.sarif`, and `pentest_report.docx` at report time.
+
+### Added — DOCX Report Export
+- **DOCX exporter** (`core/docx_exporter.py`) — python-docx Word document for clients who need editable format. Cover page with metadata table, findings summary table with severity color-coded cells, detailed finding sections with monospace proof-of-existence blocks.
+- **Markdown stripping** — `_strip_md()` converts markdown formatting to plain text for Word display. `_add_md_content()` handles headings, lists, code blocks, paragraphs.
+- **Bookkeeper integration** — `pentest_report.docx` generated at report time.
+
+### Tests — 49 new tests
+- `tests/test_report_export.py` — PDF file creation, magic bytes verification, empty/minimal/full findings, all severity levels. DOCX file creation, ZIP magic, content verification, table verification. Helper function tests for HTML escaping, markdown conversion, severity color mapping, markdown stripping.
 
 ## v3.0 — 2026-09-02
 

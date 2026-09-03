@@ -14,6 +14,11 @@ Chimeras is an autonomous AI pentest swarm with adaptive decision-making. 9 bots
 - **Thread-safe JSONL writes** — threading.Lock + fcntl defense in depth.
 - **Telemetry truncation tracking** — parse_ok parameter, truncation counted as failure.
 
+## v3.1 Features (Sep 3, 2026)
+- **PDF report export** — WeasyPrint-rendered client-ready PDF with cover page, TOC, CVSS color-coded finding cards, Cyberian Defenses branding. `pentest_report.pdf` in engagement report directory.
+- **DOCX report export** — python-docx Word document for clients who need editable format. CVSS color-coded tables, severity-shaded finding sections. `pentest_report.docx` in engagement report directory.
+- **316 pytest tests** — 49 new tests covering PDF/DOCX export, markdown conversion, severity color mapping.
+
 ## Stack
 - Python 3.11+
 - LangGraph (multi-agent orchestration, conditional edges, loopback paths)
