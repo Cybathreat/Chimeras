@@ -439,6 +439,38 @@ def _build_finding_card(finding: Dict[str, Any], index: int) -> str:
     cvss = finding.get("cvss", "N/A")
     status = _escape_html(finding.get("status", "Confirmed"))
 
+    # Evidence hash (if present)
+    evidence_hash = finding.get("evidence_hash")
+    evidence_section = ""
+    if evidence_hash:
+        evidence_section = (
+            f'<h3>Evidence Hash (SHA-256)</h3>'
+            f'<pre><code>{_escape_html(evidence_hash)}</code></pre>'
+        )
+
+    # Compliance mappings (if present)
+    compliance = finding.get("compliance", {})
+    compliance_section = ""
+    compliance_mappings = compliance.get("compliance", {}) if compliance else {}
+    if compliance_mappings:
+        compliance_lines = []
+        for fw_name, controls in compliance_mappings.items():
+            for ctrl in controls:
+                compliance_lines.append(
+                    f"<tr>"
+                    f"<td><strong>{_escape_html(fw_name)}</strong></td>"
+                    f"<td>{_escape_html(ctrl['control_id'])}</td>"
+                    f"<td>{_escape_html(ctrl['control_name'])}</td>"
+                    f"</tr>"
+                )
+        compliance_section = (
+            f'<h3>Compliance Mapping</h3>'
+            f'<table class="md-table">'
+            f'<tr><th>Framework</th><th>Control ID</th><th>Control Name</th></tr>'
+            f"{''.join(compliance_lines)}"
+            f'</table>'
+        )
+
     card = f"""
     <div class="finding-card">
       <div class="finding-header" style="background:{colors['bg']};">
@@ -460,6 +492,10 @@ def _build_finding_card(finding: Dict[str, Any], index: int) -> str:
 
         <h3>Proof of Existence</h3>
         <pre><code>{_escape_html(finding.get("proof_of_existence", "N/A"))}</code></pre>
+
+        {evidence_section}
+
+        {compliance_section}
 
         <h3>Remediation</h3>
         <p>{_md_inline_to_html(finding.get("remediation", "N/A"))}</p>

@@ -2,7 +2,18 @@
 
 All notable changes to Chimeras. Dates in Paris time (CEST/UTC+2).
 
-## v3.1 — 2026-09-03
+### Added — Evidence Locker
+- **EvidenceLocker** (`core/evidence.py`) — SHA-256 hashed evidence chain. Collects raw tool outputs, PoC files, and finding proof_of_existence text into `evidence/` directory. Every artifact hashed and linked to findings. Manifest JSON with integrity hash for tamper detection. `verify_manifest()` validates evidence chain has not been altered.
+- **Bookkeeper integration** — `evidence/evidence_manifest.json` generated at report time. Findings enriched with `evidence_hash` field. Evidence hashes and compliance mappings rendered in PDF and DOCX finding cards.
+
+### Added — Compliance Mapper
+- **ComplianceMapper** (`core/compliance.py`) — Maps findings to 4 frameworks: OWASP ASVS 4.0, PCI DSS 4.0, ISO 27001:2022 Annex A, NIST 800-53 Rev 5. 29 vulnerability categories detected via keyword/regex patterns. Each finding gets per-framework control IDs with control names.
+- **Bookkeeper integration** — `report/compliance_mapping.md` generated at report time. Per-finding control references in PDF and DOCX exports. Summary with framework counts and control-to-finding mapping.
+
+### Tests — 31 new tests
+- `tests/test_evidence_compliance.py` — EvidenceLocker: manifest creation, SHA-256 hash verification, tamper detection, finding linking, empty dir handling, summary. ComplianceMapper: SQLi/XSS/SSL/CSRF/default-cred mappings, no-vuln findings, multiple vuln types, summary counts, format_for_report, vuln detection patterns.
+
+## v3.1 — 2026-09-03 (initial)
 
 ### Added — PDF Report Export
 - **PDF exporter** (`core/pdf_exporter.py`) — WeasyPrint-rendered client-ready PDF. Cover page with dark navy branding, table of contents, CVSS color-coded finding cards (critical=dark red, high=red, medium=amber, low=blue, info=gray), professional typography with A4 page sizing, page numbers, footer branding.

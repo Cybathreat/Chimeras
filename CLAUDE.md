@@ -17,7 +17,9 @@ Chimeras is an autonomous AI pentest swarm with adaptive decision-making. 9 bots
 ## v3.1 Features (Sep 3, 2026)
 - **PDF report export** — WeasyPrint-rendered client-ready PDF with cover page, TOC, CVSS color-coded finding cards, Cyberian Defenses branding. `pentest_report.pdf` in engagement report directory.
 - **DOCX report export** — python-docx Word document for clients who need editable format. CVSS color-coded tables, severity-shaded finding sections. `pentest_report.docx` in engagement report directory.
-- **316 pytest tests** — 49 new tests covering PDF/DOCX export, markdown conversion, severity color mapping.
+- **Evidence Locker** — SHA-256 hashed evidence chain. Collects raw tool outputs, PoC files, and finding proofs into `evidence/` directory with tamper-detectable manifest. Every finding linked to its evidence hash. `evidence/evidence_manifest.json` with manifest integrity verification.
+- **Compliance Mapper** — Maps findings to OWASP ASVS 4.0, PCI DSS 4.0, ISO 27001:2022, NIST 800-53 Rev 5 control IDs. Keyword-based vuln type detection across 29 vulnerability categories. `report/compliance_mapping.md` with per-finding control references.
+- **347 pytest tests** — 80 new tests covering PDF/DOCX export, evidence locker, compliance mapping, markdown conversion, severity color mapping, vuln detection patterns.
 
 ## Stack
 - Python 3.11+

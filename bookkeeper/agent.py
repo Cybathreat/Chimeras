@@ -27,6 +27,8 @@ from core.findings_store import FindingsStore
 from core.sarif_exporter import write_sarif
 from core.pdf_exporter import export_pdf, is_pdf_available
 from core.docx_exporter import export_docx, is_docx_available
+from core.evidence import EvidenceLocker
+from core.compliance import ComplianceMapper
 
 
 class Bookkeeper(BaseBot):
@@ -315,6 +317,48 @@ Respond with the complete report as markdown. Do NOT wrap in JSON. Do NOT wrap i
                 except Exception as e:
                     self._log(f"DOCX export failed: {e}", "ERROR")
 
+                # v3.1: Evidence Locker — SHA-256 hashed evidence chain
+                try:
+                    locker = EvidenceLocker(self.engagement_dir)
+                    evidence_manifest = locker.collect_all(structured_findings)
+                    self._log(
+                        f"Evidence locker: {evidence_manifest['total_artifacts']} artifacts, "
+                        f"manifest hash: {evidence_manifest['manifest_hash'][:16]}...",
+                        "EVIDENCE"
+                    )
+
+                    # Enrich findings with evidence hashes for PDF/DOCX
+                    structured_findings = locker.get_findings_with_hashes(structured_findings)
+
+                    # Verify manifest integrity
+                    if locker.verify_manifest():
+                        self._log("Evidence manifest verified (tamper-free)", "EVIDENCE")
+                    else:
+                        self._log("Evidence manifest verification FAILED", "WARN")
+                except Exception as e:
+                    self._log(f"Evidence locker failed: {e}", "ERROR")
+
+                # v3.1: Compliance Mapper — OWASP ASVS / PCI DSS / ISO 27001 / NIST 800-53
+                try:
+                    mapper = ComplianceMapper()
+                    compliance_data = mapper.format_for_report(structured_findings)
+
+                    # Enrich findings with compliance mappings
+                    structured_findings = mapper.map_findings(structured_findings)
+
+                    # Write compliance report
+                    compliance_path = self.engagement_dir / "report" / "compliance_mapping.md"
+                    compliance_path.parent.mkdir(parents=True, exist_ok=True)
+                    compliance_path.write_text(compliance_data["formatted_text"])
+                    self._log(
+                        f"Compliance mapping: {compliance_data['summary']['mapped_findings']}/"
+                        f"{compliance_data['summary']['total_findings']} findings mapped → "
+                        f"compliance_mapping.md",
+                        "COMPLIANCE"
+                    )
+                except Exception as e:
+                    self._log(f"Compliance mapping failed: {e}", "ERROR")
+
                 self._log(f"Structured report generated: {len(structured_findings)} findings, "
                           f"{len(critical_findings)} critical", "REPORT")
             except Exception as e:
@@ -346,6 +390,8 @@ Respond with the complete report as markdown. Do NOT wrap in JSON. Do NOT wrap i
                 f"PDF report: report/pentest_report.pdf\n"
                 f"DOCX report: report/pentest_report.docx\n"
                 f"SARIF export: report/findings.sarif\n"
+                f"Compliance mapping: report/compliance_mapping.md\n"
+                f"Evidence locker: evidence/evidence_manifest.json\n"
                 f"Cleanup report: {'report/cleanup_report.md' if artifacts else 'N/A (no artifacts)'}\n"
                 f"Audit JSON: report/engagement_audit.json\n"
             )

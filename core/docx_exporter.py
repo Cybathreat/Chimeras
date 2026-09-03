@@ -270,7 +270,6 @@ def _add_finding_detail(doc: Document, finding: Dict[str, Any], index: int):
         ("Attack Vectors", finding.get("attack_vectors", "N/A")),
         ("Proof of Concept", finding.get("poc", "N/A")),
         ("Proof of Existence", finding.get("proof_of_existence", "N/A")),
-        ("Remediation", finding.get("remediation", "N/A")),
     ]
 
     for section_title, content in sections:
@@ -285,6 +284,38 @@ def _add_finding_detail(doc: Document, finding: Dict[str, Any], index: int):
             p.paragraph_format.left_indent = Cm(0.5)
         else:
             _add_md_content(doc, content)
+
+    # Evidence hash (if present)
+    evidence_hash = finding.get("evidence_hash")
+    if evidence_hash:
+        doc.add_heading("Evidence Hash (SHA-256)", level=3)
+        p = doc.add_paragraph()
+        run = p.add_run(evidence_hash)
+        run.font.name = "Courier New"
+        run.font.size = Pt(9)
+        run.font.color.rgb = RGBColor(0x1e, 0x3a, 0x5f)
+
+    # Compliance mappings (if present)
+    compliance = finding.get("compliance", {})
+    compliance_mappings = compliance.get("compliance", {}) if compliance else {}
+    if compliance_mappings:
+        doc.add_heading("Compliance Mapping", level=3)
+        comp_table = doc.add_table(rows=1, cols=3)
+        comp_table.style = 'Table Grid'
+        for i, header in enumerate(["Framework", "Control ID", "Control Name"]):
+            cell = comp_table.rows[0].cells[i]
+            _shade_cell(cell, "475569")
+            _set_cell_text(cell, header, bold=True, white_text=True, font_size=9)
+        for fw_name, controls in compliance_mappings.items():
+            for ctrl in controls:
+                row = comp_table.add_row()
+                _set_cell_text(row.cells[0], fw_name, bold=True, font_size=9)
+                _set_cell_text(row.cells[1], ctrl["control_id"], font_size=9)
+                _set_cell_text(row.cells[2], ctrl["control_name"], font_size=9)
+
+    # Remediation
+    doc.add_heading("Remediation", level=3)
+    _add_md_content(doc, finding.get("remediation", "N/A"))
 
     # Separator
     p = doc.add_paragraph()
