@@ -136,8 +136,12 @@ def check_config_file(mission_dir: Path) -> Optional[Dict[str, Any]]:
     return config
 
 
-def run_mission_setup(mission_dir: Path) -> Dict[str, Any]:
-    """Run interactive mission setup using the existing interactive_setup()."""
+def run_mission_setup(mission_dir: Path) -> tuple[Dict[str, Any], Path]:
+    """Run interactive mission setup using the existing interactive_setup().
+
+    Returns (config, config_path) — the path of the config actually created,
+    which may be in a non-default mission directory.
+    """
     console.print()
     console.print("  [bold]No mission configured. Let's set one up.[/bold]")
     console.print()
@@ -162,7 +166,18 @@ def run_mission_setup(mission_dir: Path) -> Dict[str, Any]:
     if Confirm.ask("  Configure LLM backends for the 9 agents now?", default=True):
         config = configure_llm_backends(config, config_path)
 
-    return config
+    return config, config_path
+
+
+def find_existing_missions(search_dir: Path) -> List[Path]:
+    """Find mission directories (any dir containing swarm-config.json),
+    one level deep. Lets the wizard reuse missions instead of re-creating."""
+    try:
+        return sorted(
+            p.parent for p in search_dir.glob("*/swarm-config.json")
+        )
+    except OSError:
+        return []
 
 
 # ─── LLM backend configuration (shared or per-bot) ─────────────────────
@@ -292,7 +307,9 @@ def configure_llm_backends(config: Dict[str, Any], config_path: Path) -> Dict[st
         default=True,
     )
     if shared:
-        settings = prompt_llm_settings(current=DEFAULT_SWARM_CONFIG["bots"]["warchief"])
+        current = config.get("bots", {}).get("warchief") \
+            or DEFAULT_SWARM_CONFIG["bots"]["warchief"]
+        settings = prompt_llm_settings(current=current)
         apply_llm_settings(config, BOT_ORDER, settings)
         console.print("  [green]✓  Applied to all 9 agents[/green]")
     else:
@@ -507,14 +524,17 @@ def show_config_summary(config: Dict[str, Any]):
     console.print(f"  [bold]Bots:[/bold] {len(config.get('bots', {}))} configured")
 
 
-def run_wizard(mission_dir: Optional[Path] = None) -> Optional[Dict[str, Any]]:
+def run_wizard(mission_dir: Optional[Path] = None) -> Optional[tuple[Dict[str, Any], Path]]:
     """Run the full TUI setup wizard.
 
     Args:
         mission_dir: Mission directory path. If None, uses default "mission".
 
     Returns:
-        Config dict if all checks pass, None if user exits.
+        (config, mission_dir) if all checks pass — mission_dir reflects the
+        directory the config actually lives in (may differ from the default
+        when the user picks an existing mission or types a custom dir).
+        None if the user exits.
     """
     mission_dir = mission_dir or Path("mission")
     config_path = mission_dir / "swarm-config.json"
@@ -533,6 +553,27 @@ def run_wizard(mission_dir: Optional[Path] = None) -> Optional[Dict[str, Any]]:
             config = check_config_file(mission_dir)
 
             if config is None:
+                # Offer existing missions before creating a new one — users
+                # often run from the default dir while their mission lives
+                # elsewhere (e.g. cyberian-defenses_audit/).
+                existing = find_existing_missions(Path.cwd())
+                if existing:
+                    console.print()
+                    console.print(f"  [dim]No config in {mission_dir}/, but existing missions found:[/dim]")
+                    for i, p in enumerate(existing, 1):
+                        console.print(f"    {i}. {p}")
+                    choice = Prompt.ask(
+                        "  Mission number to open (or 'new')", default="1"
+                    ).strip().lower()
+                    if choice != "new":
+                        try:
+                            mission_dir = existing[int(choice) - 1]
+                            config_path = mission_dir / "swarm-config.json"
+                            config = check_config_file(mission_dir)
+                        except (ValueError, IndexError):
+                            console.print("  [red]Invalid selection[/red]")
+
+            if config is None:
                 console.print()
                 should_setup = Confirm.ask(
                     "  No configuration found. Run interactive setup?",
@@ -541,7 +582,8 @@ def run_wizard(mission_dir: Optional[Path] = None) -> Optional[Dict[str, Any]]:
                 if not should_setup:
                     console.print("  [yellow]Exiting — no configuration.[/yellow]")
                     return None
-                config = run_mission_setup(mission_dir)
+                config, config_path = run_mission_setup(mission_dir)
+                mission_dir = config_path.parent
             else:
                 console.print(f"  [green]✓  Configuration found: {config_path}[/green]")
                 console.print(f"  [dim]   Mission: {config.get('mission_name', 'N/A')}[/dim]")
@@ -635,7 +677,7 @@ def run_wizard(mission_dir: Optional[Path] = None) -> Optional[Dict[str, Any]]:
                 console.print()
                 console.print("  [bold green]✓  Pre-flight complete. Launching...[/bold green]")
                 console.print()
-                return config
+                return config, config_path.parent
             else:
                 console.print()
                 action = Prompt.ask(

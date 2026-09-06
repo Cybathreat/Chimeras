@@ -280,11 +280,11 @@ Examples:
         # v2: Run TUI wizard unless --skip-wizard is passed
         if not args.skip_wizard:
             from core.wizard import run_wizard
-            verified_config = run_wizard(mission_dir)
-            if verified_config is None:
+            wizard_result = run_wizard(mission_dir)
+            if wizard_result is None:
                 print("Exiting — wizard cancelled or checks failed.")
                 return
-            swarm_config = verified_config
+            swarm_config, mission_dir = wizard_result
 
         if args.docker:
             swarm_config["enable_docker"] = True
@@ -325,10 +325,11 @@ Examples:
         # No subcommand — run TUI wizard
         from core.wizard import run_wizard
 
-        config = run_wizard(Path("mission"))
-        if config is None:
+        result = run_wizard(Path("mission"))
+        if result is None:
             print("Exiting.")
             return
+        config, mission_dir = result
 
         # If wizard completed, ask if they want to run now
         from rich.console import Console
@@ -336,12 +337,7 @@ Examples:
         console = Console()
         console.print()
         if Confirm.ask("  Start the operation now?", default=True):
-            mission_dir = Path("mission")
-            config_path = mission_dir / "swarm-config.json"
-            if config_path.exists():
-                asyncio.run(run_operation(mission_dir, config, auto_approve=False, resume=False))
-            else:
-                console.print("  [red]No mission directory found. Run 'python main.py setup' first.[/red]")
+            asyncio.run(run_operation(mission_dir, config, auto_approve=False, resume=False))
 
 
 if __name__ == "__main__":

@@ -11,8 +11,10 @@ Covers:
 
 import os
 import copy
+import json
 
-from core.wizard import apply_llm_settings, BOT_ORDER
+import core.wizard
+from core.wizard import apply_llm_settings, find_existing_missions, BOT_ORDER
 from core.config import DEFAULT_SWARM_CONFIG
 from core.llm_router import LLMRouter
 
@@ -69,6 +71,35 @@ class TestApplyLLMSettings:
         settings = {"provider": "ollama", "model": "llama3"}
         apply_llm_settings(config, ["warchief"], settings)
         assert config["bots"]["warchief"]["provider"] == "ollama"
+
+
+class TestMissionDiscovery:
+    def test_finds_mission_dirs(self, tmp_path):
+        (tmp_path / "alpha").mkdir()
+        (tmp_path / "alpha" / "swarm-config.json").write_text("{}")
+        (tmp_path / "beta").mkdir()  # no config — not a mission
+        found = find_existing_missions(tmp_path)
+        assert found == [tmp_path / "alpha"]
+
+    def test_empty_when_none(self, tmp_path):
+        assert find_existing_missions(tmp_path) == []
+
+
+class TestRunMissionSetupPath:
+    def test_returns_config_and_actual_config_path(self, tmp_path, monkeypatch):
+        """run_mission_setup must return the path where the config was
+        actually written — the mission dir may differ from the default."""
+        monkeypatch.setattr(core.wizard, "interactive_setup", lambda: {
+            "mission_name": "T", "objectives": "o", "scope": "s",
+            "roe": "r", "dir": str(tmp_path / "my-mission"),
+        })
+        monkeypatch.setattr(core.wizard.Confirm, "ask",
+                            staticmethod(lambda *a, **k: False))  # skip LLM cfg
+        config, config_path = core.wizard.run_mission_setup(tmp_path)
+        assert config_path == tmp_path / "my-mission" / "swarm-config.json"
+        assert config_path.exists()
+        assert json.loads(config_path.read_text())["mission_name"] == "T"
+        assert config["mission_name"] == "T"
 
 
 class TestFromConfigApiKey:
