@@ -11,6 +11,13 @@ jinja2>=3.1             # Prompt and report templates
 weasyprint>=60.0        # PDF reports (needs system libs: pango, cairo)
 python-docx>=1.0        # DOCX reports + proposals
 
+# LLM provider SDKs (optional — lazy-imported; install only what you configure).
+# Ollama needs no SDK (plain httpx).
+#   pip install anthropic      # Claude
+#   pip install google-genai   # Gemini
+#   pip install groq           # Groq
+#   pip install openai         # GPT / OpenRouter / any OpenAI-compatible gateway
+
 # Note: Docker sandboxing uses the docker CLI via subprocess (no SDK).
 # Web search has no SDK deps — Tavily is plain httpx, DuckDuckGo is HTML scrape.
 
