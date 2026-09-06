@@ -192,7 +192,10 @@ def prompt_llm_settings(current: Optional[Dict[str, Any]] = None,
     console.print("  [bold]Providers:[/bold]")
     for i, p in enumerate(PROVIDERS, 1):
         marker = " ←" if p == current.get("provider") else ""
-        label = "custom (OpenAI-compatible gateway)" if p == "custom" else p
+        label = {
+            "custom": "custom (OpenAI-compatible gateway)",
+            "ollama": "ollama (local or cloud)",
+        }.get(p, p)
         console.print(f"    {i}. {label}{marker}")
 
     try:
@@ -214,6 +217,24 @@ def prompt_llm_settings(current: Optional[Dict[str, Any]] = None,
         while not base_url:
             base_url = Prompt.ask(
                 "  Gateway base URL (e.g. https://gateway.local/v1)"
+            ).strip()
+    elif provider == "ollama":
+        flavor = Prompt.ask(
+            "  Ollama local or cloud?",
+            choices=["local", "cloud"],
+            default="local",
+        )
+        if flavor == "cloud":
+            # Ollama Cloud speaks the OpenAI API → openai provider + base_url.
+            # Key comes from OLLAMA_API_KEY (checked by the openai branch below).
+            provider = "openai"
+            base_url = Prompt.ask(
+                "  Ollama Cloud base URL", default="https://ollama.com/v1"
+            ).strip()
+        else:
+            base_url = Prompt.ask(
+                "  Ollama host (empty = http://localhost:11434)",
+                default=current.get("base_url", ""),
             ).strip()
     elif provider in ("openai", "anthropic"):
         base_url = Prompt.ask(
