@@ -54,16 +54,16 @@ BOT_ORDER = ["warchief", "aria", "lisa", "bloodhound", "wasp", "marksman",
 def print_banner():
     """Print the Chimeras welcome banner."""
     banner = r"""
-   ____ _                               ___  __
-  / ___| |__  _   _ _ __   __ _ ___ ___ / \/\/ /
- | |   | '_ \| | | | '_ \ / _` / __/ __|/ /\_/ /
- | |___| | | | |_| | |_) | (_| \__ \__ \_/  _ \
-  \____|_| |_|\__, | .__/ \__,_|___/___/ \_/ \_\
-              |___/|_|
+ ██████╗██╗  ██╗██╗███╗   ███╗███████╗██████╗  █████╗ ███████╗
+██╔════╝██║  ██║██║████╗ ████║██╔════╝██╔══██╗██╔══██╗██╔════╝
+██║     ███████║██║██╔████╔██║█████╗  ██████╔╝███████║███████╗
+██║     ██╔══██║██║██║╚██╔╝██║██╔══╝  ██╔══██╗██╔══██║╚════██║
+╚██████╗██║  ██║██║██║ ╚═╝ ██║███████╗██║  ██║██║  ██║███████║
+ ╚═════╝╚═╝  ╚═╝╚═╝╚═╝     ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝
 """
     console.print(banner, style="bold red")
-    console.print("  [bold]Autonomous AI Pentest Swarm[/bold] — v2.0", style="dim")
-    console.print("  [dim]Phase -1 Scope Enforcement | 9-Bot Adaptive Architecture[/dim]")
+    console.print("  [bold]Autonomous AI Pentest Swarm[/bold] — v3.2", style="dim")
+    console.print("  [dim]Docker-Sandboxed | 3-Tier Scope Enforcement | 9-Bot Adaptive Architecture[/dim]")
     console.print()
 
 
