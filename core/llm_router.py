@@ -144,9 +144,15 @@ class LLMRouter:
 
         base_url is optional and only used for openai/anthropic providers.
         It can also be set via env vars OPENAI_BASE_URL / ANTHROPIC_BASE_URL.
+
+        api_key is optional — if present in the bot config it takes precedence
+        over environment variables. Stored plaintext; only written when the
+        operator explicitly opts in during interactive setup.
         """
         bot_config = swarm_config.get("bots", {}).get(bot_name, {})
         provider = bot_config.get("provider", "ollama")
         model = bot_config.get("model")
         base_url = bot_config.get("base_url")  # Optional, from config
-        return cls(provider_name=provider, model=model, base_url=base_url)
+        api_key = bot_config.get("api_key")    # Optional, plaintext opt-in
+        return cls(provider_name=provider, model=model, base_url=base_url,
+                   api_key=api_key)

@@ -157,6 +157,134 @@ def run_mission_setup(mission_dir: Path) -> Dict[str, Any]:
 
     console.print()
     console.print(f"  [green]✓  Mission created at {config_path}[/green]")
+
+    if Confirm.ask("  Configure LLM backends for the 9 agents now?", default=True):
+        config = configure_llm_backends(config, config_path)
+
+    return config
+
+
+# ─── LLM backend configuration (shared or per-bot) ─────────────────────
+
+PROVIDERS = ["openai", "anthropic", "google", "groq", "openrouter", "ollama", "custom"]
+
+# Provider → environment variables checked for its API key
+KEY_ENV_VARS = {
+    "openai": ["OPENAI_API_KEY", "OLLAMA_API_KEY"],
+    "anthropic": ["ANTHROPIC_API_KEY"],
+    "google": ["GOOGLE_API_KEY"],
+    "groq": ["GROQ_API_KEY"],
+    "openrouter": ["OPENROUTER_API_KEY"],
+    "ollama": [],  # local Ollama needs no key
+}
+
+
+def prompt_llm_settings(current: Optional[Dict[str, Any]] = None,
+                        bot_label: str = "") -> Dict[str, Any]:
+    """Interactively collect provider/model/base_url/api_key.
+
+    Returns a settings dict consumable by apply_llm_settings()."""
+    current = current or {}
+    header = f" for [bold]{bot_label}[/bold]" if bot_label else ""
+    console.print()
+    console.print(f"  [bold]LLM backend{header}[/bold]")
+    console.print("  [bold]Providers:[/bold]")
+    for i, p in enumerate(PROVIDERS, 1):
+        marker = " ←" if p == current.get("provider") else ""
+        label = "custom (OpenAI-compatible gateway)" if p == "custom" else p
+        console.print(f"    {i}. {label}{marker}")
+
+    try:
+        default_idx = PROVIDERS.index(current.get("provider", "ollama")) + 1
+    except ValueError:
+        default_idx = PROVIDERS.index("ollama") + 1
+    choice = Prompt.ask("  Provider number", default=str(default_idx))
+    try:
+        provider = PROVIDERS[int(choice) - 1]
+    except (ValueError, IndexError):
+        provider = current.get("provider", "ollama")
+
+    # Custom gateway = openai provider with a mandatory base_url.
+    # Any OpenAI-compatible endpoint works: Ollama Cloud, vLLM, LM Studio,
+    # Azure OpenAI, corporate gateways, etc.
+    base_url = ""
+    if provider == "custom":
+        provider = "openai"
+        while not base_url:
+            base_url = Prompt.ask(
+                "  Gateway base URL (e.g. https://gateway.local/v1)"
+            ).strip()
+    elif provider in ("openai", "anthropic"):
+        base_url = Prompt.ask(
+            "  Base URL (empty = official API)",
+            default=current.get("base_url", ""),
+        ).strip()
+
+    model = Prompt.ask("  Model", default=current.get("model", "")).strip()
+
+    settings: Dict[str, Any] = {"provider": provider, "model": model}
+    if base_url:
+        settings["base_url"] = base_url
+
+    # API key: env first, session-only set, or opt-in plaintext persist
+    env_vars = KEY_ENV_VARS.get(provider, [])
+    if env_vars:
+        existing = next((v for v in env_vars if os.environ.get(v)), None)
+        if existing:
+            console.print(f"  [green]✓  API key found in environment ({existing})[/green]")
+        else:
+            console.print(f"  [yellow]⚠  No API key found ({' / '.join(env_vars)})[/yellow]")
+            key = Prompt.ask("  Enter API key (empty = skip)", password=True).strip()
+            if key:
+                persist = Confirm.ask(
+                    "  Save key into swarm-config.json? (plaintext on disk)",
+                    default=False,
+                )
+                if persist:
+                    settings["api_key"] = key
+                else:
+                    os.environ[env_vars[0]] = key
+                    console.print("  [dim]Set for this session only — export it to persist.[/dim]")
+
+    return settings
+
+
+def apply_llm_settings(config: Dict[str, Any], bot_names: List[str],
+                       settings: Dict[str, Any]) -> Dict[str, Any]:
+    """Apply an LLM settings dict to one or more bots. Pure function."""
+    entry = {"provider": settings["provider"], "model": settings["model"]}
+    for optional in ("base_url", "api_key"):
+        if settings.get(optional):
+            entry[optional] = settings[optional]
+    config.setdefault("bots", {})
+    for name in bot_names:
+        config["bots"][name] = dict(entry)  # independent copies
+    return config
+
+
+def configure_llm_backends(config: Dict[str, Any], config_path: Path) -> Dict[str, Any]:
+    """Shared-or-per-bot LLM configuration flow."""
+    console.print()
+    shared = Confirm.ask(
+        "  [bold]Do all 9 agents share the same LLM configuration?[/bold]",
+        default=True,
+    )
+    if shared:
+        settings = prompt_llm_settings(current=DEFAULT_SWARM_CONFIG["bots"]["warchief"])
+        apply_llm_settings(config, BOT_ORDER, settings)
+        console.print("  [green]✓  Applied to all 9 agents[/green]")
+    else:
+        for bot in BOT_ORDER:
+            info = BOT_INFO.get(bot, {"role": "?", "icon": "?"})
+            settings = prompt_llm_settings(
+                current=config.get("bots", {}).get(bot, {}),
+                bot_label=f"{info['icon']} {bot} — {info['role']}",
+            )
+            apply_llm_settings(config, [bot], settings)
+
+    with open(config_path, "w") as f:
+        json.dump(config, f, indent=2)
+    console.print(f"  [green]✓  LLM configuration saved to {config_path.name}[/green]")
     return config
 
 
@@ -301,74 +429,17 @@ def run_connectivity_check(config: Dict[str, Any]) -> tuple[List[Dict[str, Any]]
 
 def reconfigure_bot(bot_name: str, config: Dict[str, Any],
                     config_path: Path) -> Dict[str, Any]:
-    """Interactive bot reconfiguration.
-
-    Lets the user change provider, model, base_url, and API key for a bot.
-    """
+    """Interactive bot reconfiguration — same prompts as initial setup."""
     bot_config = config["bots"].get(bot_name, {})
     info = BOT_INFO.get(bot_name, {"role": "?", "icon": "?"})
 
     console.print()
     console.print(f"  [bold]Reconfiguring {info['icon']} {bot_name}[/bold] [dim]({info['role']})[/dim]")
     console.print(f"  [dim]Current: {bot_config.get('provider', '?')}/{bot_config.get('model', '?')}[/dim]")
-    console.print()
 
-    # Provider selection
-    console.print("  [bold]Available providers:[/bold]")
-    providers = ["openai", "anthropic", "google", "groq", "openrouter", "ollama"]
-    for i, p in enumerate(providers, 1):
-        marker = " ←" if p == bot_config.get("provider") else ""
-        console.print(f"    {i}. {p}{marker}")
+    settings = prompt_llm_settings(current=bot_config)
+    apply_llm_settings(config, [bot_name], settings)
 
-    choice = Prompt.ask(
-        "  Provider number",
-        default=str(providers.index(bot_config.get("provider", "ollama")) + 1)
-    )
-    try:
-        provider = providers[int(choice) - 1]
-    except (ValueError, IndexError):
-        provider = bot_config.get("provider", "ollama")
-
-    # Model
-    current_model = bot_config.get("model", "")
-    model = Prompt.ask("  Model", default=current_model)
-
-    # Base URL (for openai/anthropic)
-    base_url = bot_config.get("base_url", "")
-    if provider in ("openai", "anthropic"):
-        base_url = Prompt.ask("  Base URL (empty = official API)", default=base_url)
-
-    # API key
-    console.print()
-    console.print("  [dim]API keys are read from environment variables:[/dim]")
-    key_map = {
-        "openai": "OPENAI_API_KEY or OLLAMA_API_KEY",
-        "anthropic": "ANTHROPIC_API_KEY",
-        "google": "GOOGLE_API_KEY",
-        "groq": "GROQ_API_KEY",
-        "openrouter": "OPENROUTER_API_KEY",
-        "ollama": "(no key needed)",
-    }
-    env_var = key_map.get(provider, "?")
-    current_key = os.environ.get(env_var.split(" or ")[0], "")
-    if current_key:
-        console.print(f"  [green]✓  {env_var} is set[/green]")
-    else:
-        console.print(f"  [yellow]⚠  {env_var} not set in environment[/yellow]")
-        if provider != "ollama":
-            key = Prompt.ask("  Enter API key (empty = skip)", password=True)
-            if key:
-                # Set in environment for this session
-                env_var_name = env_var.split(" or ")[0].split()[0]
-                os.environ[env_var_name] = key
-
-    # Update config
-    new_config = {"provider": provider, "model": model}
-    if base_url:
-        new_config["base_url"] = base_url
-    config["bots"][bot_name] = new_config
-
-    # Save
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
     console.print(f"  [green]✓  {bot_name} reconfigured and saved[/green]")
