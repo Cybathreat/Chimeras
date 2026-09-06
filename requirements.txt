@@ -22,4 +22,6 @@ python-docx>=1.0        # DOCX reports + proposals
 # Web search has no SDK deps — Tavily is plain httpx, DuckDuckGo is HTML scrape.
 
 # Dev/testing (not needed at runtime):
-#   pip install pytest ruff
+#   pip install -r requirements-dev.txt  (pytest, ruff)
+# Verified against: httpx 0.28, langgraph 1.2, rich 15, pydantic 2.13,
+# Jinja2 3.1, weasyprint 69, python-docx 1.2

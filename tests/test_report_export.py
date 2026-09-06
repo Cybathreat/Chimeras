@@ -14,6 +14,10 @@ Tests cover:
 - Severity color mapping
 """
 
+import importlib
+import sys
+from unittest import mock
+
 import pytest
 from pathlib import Path
 import tempfile
@@ -33,6 +37,23 @@ from core.docx_exporter import (
     _severity_shading,
     _strip_md,
 )
+
+
+# ─── Regression: graceful degradation without optional deps ──────────
+
+def test_docx_exporter_imports_without_python_docx():
+    """Regression (v3.2): docx_exporter must import cleanly when python-docx
+    is absent — module-level RGBColor usage previously crashed with NameError."""
+    import core.docx_exporter as m
+    blocked = {k: None for k in (
+        "docx", "docx.shared", "docx.enum", "docx.enum.text",
+        "docx.enum.table", "docx.oxml", "docx.oxml.ns",
+    )}
+    with mock.patch.dict(sys.modules, blocked):
+        importlib.reload(m)
+        assert m.DOCX_AVAILABLE is False
+        assert m.is_docx_available() is False
+    importlib.reload(m)  # restore real module state for other tests
 
 
 # ─── Fixtures ─────────────────────────────────────────────────────────

@@ -14,6 +14,8 @@ Integration:
     Output: pentest_report.docx in the engagement report directory.
 """
 
+from __future__ import annotations
+
 import logging
 import re
 from pathlib import Path
@@ -35,16 +37,21 @@ except ImportError:
     Document = None
 
 # ─── Severity color mapping ───────────────────────────────────────────
+# RGBColor exists only when python-docx is installed — guard for graceful
+# degradation (module must import cleanly without the dependency).
 
-_SEVERITY_COLORS = {
-    "critical": RGBColor(0x7f, 0x1d, 0x1d),  # dark red
-    "high":     RGBColor(0xdc, 0x26, 0x26),  # red
-    "medium":   RGBColor(0xf5, 0x9e, 0x0b),  # amber
-    "low":      RGBColor(0x3b, 0x82, 0xf6),  # blue
-    "info":     RGBColor(0x6b, 0x72, 0x80),  # gray
-}
-
-_DEFAULT_COLOR = RGBColor(0x6b, 0x72, 0x80)
+if DOCX_AVAILABLE:
+    _SEVERITY_COLORS = {
+        "critical": RGBColor(0x7f, 0x1d, 0x1d),  # dark red
+        "high":     RGBColor(0xdc, 0x26, 0x26),  # red
+        "medium":   RGBColor(0xf5, 0x9e, 0x0b),  # amber
+        "low":      RGBColor(0x3b, 0x82, 0xf6),  # blue
+        "info":     RGBColor(0x6b, 0x72, 0x80),  # gray
+    }
+    _DEFAULT_COLOR = RGBColor(0x6b, 0x72, 0x80)
+else:
+    _SEVERITY_COLORS = {}
+    _DEFAULT_COLOR = None
 
 # Hex strings for cell shading
 _SEVERITY_SHADING = {

@@ -195,7 +195,13 @@ git clone https://github.com/Cybathreat/Chimeras.git
 cd Chimeras
 python -m venv .venv
 source .venv/bin/activate
-pip install langgraph httpx openai anthropic rich
+pip install -r requirements.txt
+
+# Pick your LLM provider SDK (only what you configure):
+pip install anthropic      # or: google-genai / groq / openai — Ollama needs no SDK
+
+# Dev only (tests + lint):
+pip install -r requirements-dev.txt
 ```
 
 ### Configure
