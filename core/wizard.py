@@ -16,6 +16,7 @@ Uses Rich for terminal rendering. No external TUI framework needed.
 
 import json
 import os
+import textwrap
 import time
 from pathlib import Path
 from typing import Dict, Any, Optional, List
@@ -330,9 +331,9 @@ def test_llm_connection(bot_name: str, config: Dict[str, Any]) -> Dict[str, Any]
     except Exception as e:
         result["status"] = "failed"
         error_msg = str(e)
-        # Truncate long errors
-        if len(error_msg) > 120:
-            error_msg = error_msg[:120] + "..."
+        # Truncate long errors (keep enough for the actionable part)
+        if len(error_msg) > 300:
+            error_msg = error_msg[:300] + "..."
         result["error"] = error_msg
 
     return result
@@ -537,17 +538,23 @@ def run_wizard(mission_dir: Optional[Path] = None) -> Optional[Dict[str, Any]]:
                 failed_bots = [r for r in results if r["status"] != "connected"]
                 console.print()
                 console.print(f"  [bold red]✗  {len(failed_bots)} bot(s) failed connectivity[/bold red]")
+                # Group identical errors — one message for 9 identical failures, not 9 dumps
+                error_groups: Dict[str, List[str]] = {}
                 for r in failed_bots:
-                    console.print(
-                        f"    [red]• {r['bot_name']}[/red]: {r['status']} — {r.get('error', 'empty response')}"
-                    )
+                    error_groups.setdefault(r.get("error", "empty response"), []).append(r["bot_name"])
+                for err, bots in error_groups.items():
+                    console.print(f"    [red]• {', '.join(bots)}[/red]:")
+                    console.print(textwrap.fill(err, width=88,
+                                                initial_indent="      ",
+                                                subsequent_indent="      "))
 
                 # Offer to reconfigure failed bots
                 console.print()
+                all_failed = len(failed_bots) == len(results)
                 action = Prompt.ask(
                     "  [bold]What do you want to do?[/bold]",
-                    choices=["retry", "reconfigure", "continue", "exit"],
-                    default="retry",
+                    choices=["reconfigure-all", "reconfigure", "retry", "continue", "exit"],
+                    default="reconfigure-all" if all_failed else "retry",
                 )
 
                 if action == "exit":
@@ -555,6 +562,12 @@ def run_wizard(mission_dir: Optional[Path] = None) -> Optional[Dict[str, Any]]:
                     return None
                 elif action == "continue":
                     console.print("  [yellow]⚠  Proceeding with failed bots — some may not work[/yellow]")
+                elif action == "reconfigure-all":
+                    # Shared-or-per-bot flow — same as first-time setup
+                    config = configure_llm_backends(config, config_path)
+                    console.print()
+                    console.print("  [bold]Re-running connectivity check...[/bold]")
+                    continue  # Loop back to step 2
                 elif action == "reconfigure":
                     # List failed bots for selection
                     console.print()
