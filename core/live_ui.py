@@ -251,9 +251,14 @@ class OperationUI:
         table.add_column("Finding", overflow="fold", ratio=3)
         table.add_column("Host", overflow="fold", ratio=2)
 
+        # Low/info findings are counted but not displayed — noise reduction
         severities = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+        displayable = [f for f in findings
+                       if str(f.get("severity", "info")).lower() in
+                       ("critical", "high", "medium")]
+        hidden = len(findings) - len(displayable)
         ordered = sorted(
-            findings,
+            displayable,
             key=lambda f: severities.get(str(f.get("severity", "info")).lower(), 5),
         )
         # most severe on top; cap to last-frame capacity
@@ -274,9 +279,14 @@ class OperationUI:
             sev = str(f.get("severity", "info")).lower()
             counts[sev] = counts.get(sev, 0) + 1
         subtitle = "  ".join(
-            f"{s}:{counts[s]}" for s in ("critical", "high", "medium", "low")
+            f"{s}:{counts[s]}" for s in ("critical", "high", "medium")
             if counts.get(s)
-        ) or "none yet"
+        )
+        if hidden:
+            subtitle = (subtitle + "  " if subtitle else "") + \
+                f"low/info hidden: {hidden}"
+        if not subtitle:
+            subtitle = "none yet"
         return Panel(table, title=f"Findings ({len(findings)})",
                      subtitle=subtitle, border_style="red")
 

@@ -66,6 +66,24 @@ class TestFindingsScan:
         ui._scan_findings()
         assert len(ui._findings) == 1
 
+    def test_low_info_hidden_from_display(self, tmp_path):
+        _write_findings(tmp_path, "wasp", [
+            {"finding_id": "f1", "severity": "critical", "description": "SQLi"},
+            {"finding_id": "f2", "severity": "low", "description": "banner"},
+            {"finding_id": "f3", "severity": "info", "description": "note"},
+        ])
+        ui = _ui(tmp_path)
+        ui._findings_scanned_at = 0
+        ui._scan_findings()
+        panel = ui._findings_panel()
+        console = Console(file=io.StringIO(), width=110, force_terminal=True)
+        console.print(panel)
+        out = console.file.getvalue()
+        assert "SQLi" in out                 # critical shown
+        assert "banner" not in out           # low hidden
+        assert "note" not in out             # info hidden
+        assert "low/info hidden: 2" in out   # but counted
+
     def test_no_evidence_dir_no_crash(self, tmp_path):
         ui = _ui(tmp_path)
         ui._findings_scanned_at = 0
