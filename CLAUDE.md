@@ -1,4 +1,4 @@
-# CLAUDE.md — Chimeras v3.0 Development Context
+# CLAUDE.md — Chimeras v3.2 Development Context
 
 ## Project
 Chimeras is an autonomous AI pentest swarm with adaptive decision-making. 9 bots (8 specialists + WarChief orchestrator), each powered by an independently assigned LLM, each reasoning autonomously about what tools to run and what strategy to use. No hardcoded tool lists — bots declare a tool category and the LLM picks tools dynamically. WarChief acts as a decision router, re-entering after each phase to adapt the engagement based on actual findings. WarChief is also a compliance officer and quality checker — he verifies every bot's output against real pentest standards.
@@ -23,6 +23,15 @@ Chimeras is an autonomous AI pentest swarm with adaptive decision-making. 9 bots
 - **Context Compaction** — Proactive token budget management. Estimates tokens before LLM call, summarizes oversized tool outputs, preserves raw data in JSONL. Integrated into BaseBot._llm() — triggers before truncation, not after.
 - **Coverage Tracker** — Records per-target/port/service/tool coverage with timestamps. `report/coverage_report.md` proves thoroughness, identifies untested targets. Integrated into Bookkeeper report pipeline.
 - **383 pytest tests** — 116 new tests covering all v3.1 modules.
+
+## v3.2 Features (Sep 3, 2026)
+- **Client Portal** — self-contained interactive HTML report (`report/client_portal.html`). No server, no cloud, zero data egress. Severity filters, detail panel, compliance matrix, evidence/coverage summary. Sovereign procurement compliant.
+- **Proposal Generator** (`core/proposal_generator.py`) — pre-engagement SOW, 4 engagement types (external/web app/internal/retest), DOCX + PDF with pricing, RoE, methodology, signatures.
+- **Retest Diff** (`core/retest_diff.py`) — cross-engagement finding diff by title+host fingerprint. NEW / FIXED / PERSISTENT / CHANGED + remediation rate.
+- **Multilingual** (`core/multilingual.py`) — FR/AR locales, 44 labels per language. CVE/CVSS/OWASP terms stay English.
+- **White-Label Branding** (`core/branding.py`) — JSON BrandConfig: company, colors, fonts, footer, legal notice. Injects into PDF CSS.
+- **Ticketing Export** (`core/ticketing_export.py`) — Jira CSV, ServiceNow JSON, GitLab issues via `export_all_tickets()`.
+- **Compliance Expansion** — SOC 2, NIS2, NCA ECC (Saudi) added. 7 frameworks total.
 
 ## Stack
 - Python 3.11+
@@ -134,6 +143,24 @@ Chimeras/
 │   ├── roe_cache.py      # v2.3: ROE prompt cache for WarChief
 │   ├── depth_matrix.py   # v2.3: Pentest depth assessment matrix for WarChief quality checks
 │   ├── compliance_brief.py # v2.3: Compliance brief builder for WarChief
+│   ├── docker_executor.py # v3.0: Disposable Kali container tool execution
+│   ├── sarif_exporter.py  # v3.0: SARIF 2.1.0 export
+│   ├── web_search.py      # v3.0: Tavily + DuckDuckGo web search
+│   ├── budget.py          # v3.0: USD cost tracking + cap
+│   ├── checkpoint.py      # v3.0: JSON checkpoints, --resume
+│   ├── pdf_exporter.py    # v3.1: WeasyPrint PDF report
+│   ├── docx_exporter.py   # v3.1: python-docx Word report
+│   ├── evidence.py        # v3.1: SHA-256 evidence locker
+│   ├── compliance.py      # v3.1: 7-framework compliance mapper
+│   ├── retest.py          # v3.1: Retest verifier
+│   ├── context_compaction.py # v3.1: Proactive token budget compaction
+│   ├── coverage.py        # v3.1: Per-target coverage tracker
+│   ├── portal_exporter.py # v3.2: Self-contained HTML client portal
+│   ├── proposal_generator.py # v3.2: Pre-engagement SOW generator
+│   ├── retest_diff.py     # v3.2: Cross-engagement finding diff
+│   ├── multilingual.py    # v3.2: FR/AR locales
+│   ├── branding.py        # v3.2: White-label brand config
+│   ├── ticketing_export.py # v3.2: Jira/ServiceNow/GitLab export
 │   └── providers/        # Provider implementations
 │       ├── anthropic.py  # Claude Opus/Sonnet/Haiku
 │       ├── google.py     # Gemini
@@ -183,10 +210,19 @@ Chimeras/
         ├── *.md            # Per-bot work logs
         ├── raw/            # Raw tool output (audit trail)
         ├── poc/            # Proof-of-concept artifacts
+        ├── evidence/       # v3.1: SHA-256 evidence chain + evidence_manifest.json
+        ├── retest/         # v3.1: retest_results.json
         └── report/         # Final report
             ├── final_report.md       # LLM narrative report
             ├── structured_report.md  # v2.4: Template-enforced structured report
             ├── executive_summary.md  # Executive summary
+            ├── pentest_report.pdf    # v3.1: Client-ready PDF
+            ├── pentest_report.docx   # v3.1: Editable Word report
+            ├── findings.sarif        # v3.0: SARIF 2.1.0 export
+            ├── client_portal.html    # v3.2: Interactive HTML client portal
+            ├── compliance_mapping.md # v3.1: 7-framework control mapping
+            ├── coverage_report.md    # v3.1: Coverage proof + untested gaps
+            ├── retest_report.md      # v3.1: Retest verification results
             ├── cleanup_report.md     # Cleanup & rollback status
             └── engagement_audit.json # Machine-readable audit with findings summary
 ```

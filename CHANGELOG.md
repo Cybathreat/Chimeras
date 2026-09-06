@@ -1,6 +1,37 @@
-# Chimeras v3.1 — Changelog
+# Chimeras — Changelog
 
 All notable changes to Chimeras. Dates in Paris time (CEST/UTC+2).
+
+## v3.2 — 2026-09-03
+
+Council Session 19 — sovereign procurement thesis.
+
+### Added — Client Portal
+- **portal_exporter.py** (`core/`) — Self-contained HTML client portal: no server, no cloud, zero data egress. Interactive findings table with severity filters, detail panel, compliance matrix, evidence/coverage summary. Sovereign procurement compliant.
+- **Bookkeeper integration** — `report/client_portal.html` generated at report time.
+
+### Added — Proposal Generator
+- **proposal_generator.py** (`core/`) — Pre-engagement SOW generator. 4 engagement types (external / web app / internal / retest). DOCX + PDF output with pricing, RoE, methodology, deliverables, acceptance signatures. Compresses scoping from days to hours.
+
+### Added — Retest Diff
+- **retest_diff.py** (`core/`) — Cross-engagement finding diff. Matches by title+host fingerprint. Status: NEW (regressions), FIXED (wins), PERSISTENT, CHANGED. Remediation rate calculation. Markdown diff report.
+
+### Added — Multilingual Reports
+- **multilingual.py** (`core/`) — FR/AR locale support. 44 labels per language. CVE/CVSS/OWASP terms stay English. MENA/Africa market wedge.
+
+### Added — White-Label Branding
+- **branding.py** (`core/`) — JSON-based BrandConfig: company name, colors, fonts, footer, legal notice. `apply_brand_to_pdf_css()` injects brand colors into existing PDF CSS.
+
+### Added — Ticketing Export
+- **ticketing_export.py** (`core/`) — Jira CSV, ServiceNow JSON, GitLab issues. One-command dev team handoff via `export_all_tickets()`.
+
+### Changed — Compliance Expansion
+- **ComplianceMapper** — SOC 2, NIS2, NCA ECC (Saudi) added. Now 7 frameworks total: OWASP ASVS 4.0, PCI DSS 4.0, ISO 27001:2022, NIST 800-53 Rev 5, SOC 2, NIS2, NCA ECC.
+
+### Tests
+- 383 tests all green, no regressions.
+
+## v3.1 — 2026-09-03 (second batch)
 
 ### Added — Evidence Locker
 - **EvidenceLocker** (`core/evidence.py`) — SHA-256 hashed evidence chain. Collects raw tool outputs, PoC files, and finding proof_of_existence text into `evidence/` directory. Every artifact hashed and linked to findings. Manifest JSON with integrity hash for tamper detection. `verify_manifest()` validates evidence chain has not been altered.

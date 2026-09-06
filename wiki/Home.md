@@ -1,6 +1,8 @@
 # Chimeras Wiki
 
-Welcome to the Chimeras v2.0 wiki — documentation for the autonomous adaptive AI penetration testing swarm.
+Welcome to the Chimeras **v3.2** wiki — documentation for the autonomous adaptive AI penetration testing swarm.
+
+> The core architecture pages below describe the v2 adaptive graph, which remains the foundation. v3.0 added Docker sandboxing, SARIF export, web search, budget caps, Jinja2 templates, tests + CI. v3.1 added PDF/DOCX reports, Evidence Locker, Compliance Mapper, Retest Verifier, Context Compaction, Coverage Tracker. v3.2 added the client portal, proposal generator, retest diff, FR/AR locales, white-label branding, ticketing export, and SOC 2/NIS2/NCA ECC compliance. See [CHANGELOG.md](https://github.com/Cybathreat/Chimeras/blob/main/CHANGELOG.md) for details.
 
 ## Pages
 

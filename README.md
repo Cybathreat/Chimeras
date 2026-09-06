@@ -4,14 +4,14 @@
 <img src="assets/logo.png?v=2" alt="Chimeras" width="600">
 
 <p>
-  10 AI agents. Each one reasons for itself.<br>
+  9 AI agents. Each one reasons for itself.<br>
   Each one picks its own tools. Each one executes real Kali Linux commands against real targets.<br>
   <strong>No hardcoded logic. No mock data. The LLM is the brain.</strong>
 </p>
 
 <!-- BADGES -->
 <p>
-  <img src="https://img.shields.io/badge/Version-2.2-9B59B6?style=for-the-badge&logo=semver&logoColor=white" alt="v2.2">
+  <img src="https://img.shields.io/badge/Version-3.2-9B59B6?style=for-the-badge&logo=semver&logoColor=white" alt="v3.2">
   <img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/LangGraph-⚡-FF6B35?style=for-the-badge&logo=langchain&logoColor=white" alt="LangGraph">
   <img src="https://img.shields.io/badge/Kali-Linux-557C94?style=for-the-badge&logo=kali-linux&logoColor=white" alt="Kali Linux">
@@ -56,7 +56,12 @@ Recon → Scan → Vuln Detection → [HUMAN GATE] → Exploit → Post-Exploit 
 - **Two human-in-loop gates** — exploitation gate + lateral movement gate
 - **Parallel vuln detection** — Bloodhound (infrastructure) + Wasp (web apps) run concurrently
 - **Code-level scope enforcement** — target validation, shell injection blocking, destructive command blocklist
+- **Docker sandboxing** — all tools execute in disposable Kali containers (`--docker`), zero host execution
 - **Full audit trail** — every decision logged, raw tool output saved, artifacts tracked
+- **Court-admissible evidence** — SHA-256 hashed evidence chains with tamper detection
+- **Compliance mapping** — findings mapped to 7 frameworks (OWASP ASVS, PCI DSS, ISO 27001, NIST 800-53, SOC 2, NIS2, NCA ECC)
+- **Client-ready output** — PDF, DOCX, SARIF, self-contained HTML client portal, ticketing export (Jira/ServiceNow/GitLab)
+- **Budget control** — per-bot/per-phase USD cost cap with hard stop
 
 ---
 
@@ -68,7 +73,7 @@ Recon → Scan → Vuln Detection → [HUMAN GATE] → Exploit → Post-Exploit 
 | 2. **Scanning** | Port scans, service enumeration, web scanning | Lisa |
 | 3. **Vuln Detection** | CVE matching, nuclei templates, SSL analysis | Bloodhound + Wasp |
 | 4. **Human Gate** | Operator reviews findings before exploitation | — |
-| 5. **Exploitation** | Payload generation, exploit execution | Pathologist → Surgeon |
+| 5. **Exploitation** | Exploit research, payload generation, execution | Marksman |
 | 6. **Post-Exploit** | Privilege escalation, lateral movement, exfiltration | Magician → Thief |
 | 7. **Cleanup** | Artifacts tracked, removal attempted, failures flagged | Bookkeeper |
 | 8. **Reporting** | Professional pentest report with CVSS scores, PoC, remediation | Bookkeeper |
@@ -86,8 +91,7 @@ WarChief re-evaluates after each phase. If recon finds nothing → loop back. If
 | **Lisa** | Active scanning | `active_scan` | 🎯 |
 | **Bloodhound** | Infrastructure vuln detection (SSL, CVEs, network services) | `vuln_detection` | 🩸 |
 | **Wasp** | Web app vuln detection (XSS, CSRF, SQLi, SSTI, SSRF, LFI/RFI, IDOR) | `web_exploit` | 🐝 |
-| **Pathologist** | Payload fabrication | `payload_fab` | 🧬 |
-| **Surgeon** | Exploitation | `exploitation` | 🔪 |
+| **Marksman** | Exploit research & exploitation | `marksman` | 🎯 |
 | **Magician** | Privilege escalation & lateral movement | `privesc` | 🎩 |
 | **Thief** | Data exfiltration | `exfiltration` | 🦹 |
 | **Bookkeeper** | Report generation, cleanup & rollback | none | 📋 |
@@ -117,12 +121,12 @@ WarChief re-evaluates after each phase. If recon finds nothing → loop back. If
                     │HUMAN GATE│ ◄── exploitation approval
                     └────┬─────┘
                          │ (approved)
-          ┌──────────────┼──────────────┐
-          ▼              ▼              ▼
-   ┌───────────┐  ┌────────┐    ┌──────────┐
-   │Pathologist│  │Surgeon │    │ Magician │
-   │(payloads) │  │(exploit)│   │(privesc) │
-   └───────────┘  └────────┘    └──────────┘
+          ┌──────────────┴──────────────┐
+          ▼                             ▼
+   ┌────────────┐                ┌──────────┐
+   │  Marksman  │                │ Magician │
+   │(exploit)   │                │(privesc) │
+   └────────────┘                └──────────┘
                                       │
                                 ┌─────▼─────┐
                                 │  Thief    │
@@ -272,6 +276,8 @@ mission/engagement/
 ├── plan.md                    # WarChief's plan + decision audit trail
 ├── log.md                     # Timestamped action log (all bots)
 ├── findings.md                # Accumulated findings (all bots)
+├── findings_*.jsonl           # Per-bot lossless findings store
+├── telemetry.jsonl            # Per-event LLM/tool telemetry
 ├── warchief.md                # Per-bot work logs
 ├── aria.md
 ├── lisa.md
@@ -281,8 +287,21 @@ mission/engagement/
 ├── warchief_decisions.json    # Machine-readable decision audit log
 ├── raw/                       # Raw tool output (audit trail)
 ├── poc/                       # Proof-of-concept artifacts
+├── evidence/                  # SHA-256 hashed evidence chain + manifest
+├── retest/                    # Retest results (retest_results.json)
 └── report/
-    └── final_report.md        # Professional pentest report + cleanup status
+    ├── final_report.md        # LLM narrative pentest report
+    ├── structured_report.md   # Template-enforced structured report
+    ├── executive_summary.md   # Executive summary
+    ├── pentest_report.pdf     # Client-ready PDF (CVSS color-coded)
+    ├── pentest_report.docx    # Editable Word report
+    ├── findings.sarif         # SARIF 2.1.0 (GitHub code-scanning)
+    ├── client_portal.html     # Self-contained interactive client portal
+    ├── compliance_mapping.md  # 7-framework control mapping
+    ├── coverage_report.md     # Per-target coverage proof
+    ├── retest_report.md       # Retest verification results
+    ├── cleanup_report.md      # Cleanup & rollback status
+    └── engagement_audit.json  # Machine-readable audit
 ```
 
 The final report includes:
@@ -290,6 +309,7 @@ The final report includes:
 - Engagement flow (all WarChief routing decisions with reasoning)
 - Findings table with severity, CVSS scores, status
 - Per-finding: description → risks → attack vectors → proof of concept → proof of existence → remediation
+- Compliance control references per finding (OWASP ASVS, PCI DSS, ISO 27001, NIST 800-53, SOC 2, NIS2, NCA ECC)
 - Decision metrics (total recon cycles, scanning cycles, exploitation cycles)
 - Cleanup status (artifacts removed, artifacts that couldn't be cleaned)
 - Mission outcome (complete, scope exhausted, authorization issues, target hardened)
@@ -338,6 +358,34 @@ Use `base_url` to route to custom gateways: Ollama Cloud, vLLM, LM Studio, Azure
 ## 📋 Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
+
+### v3.2
+
+- **Client portal** — self-contained interactive HTML report, zero data egress (sovereign procurement compliant)
+- **Proposal generator** — pre-engagement SOW in DOCX+PDF, 4 engagement types
+- **Retest diff** — cross-engagement finding diff (NEW / FIXED / PERSISTENT / CHANGED)
+- **Multilingual** — FR/AR report locales
+- **White-label branding** — JSON brand config for consultant resale
+- **Ticketing export** — Jira CSV, ServiceNow JSON, GitLab issues
+- **Compliance expansion** — SOC 2, NIS2, NCA ECC added (7 frameworks total)
+
+### v3.1
+
+- **PDF + DOCX reports** — client-ready exports with CVSS color-coded finding cards
+- **Evidence Locker** — SHA-256 hashed evidence chain with tamper-detectable manifest
+- **Compliance Mapper** — findings mapped to OWASP ASVS, PCI DSS, ISO 27001, NIST 800-53
+- **Retest Verifier** — re-runs PoCs to verify remediation (Closed/Open/Partial)
+- **Context Compaction** — proactive token budget management at 85% threshold
+- **Coverage Tracker** — per-target/port/service/tool coverage proof
+
+### v3.0
+
+- **Docker sandboxing** — disposable Kali containers, zero host execution
+- **SARIF 2.1.0 export** — GitHub code-scanning compatible
+- **Web search** — Tavily + DuckDuckGo for ARIA and Marksman
+- **Budget management** — USD cap per engagement, hard stop
+- **Jinja2 prompt templates** — prompt tuning without code changes
+- **383 pytest tests + GitHub Actions CI**
 
 ### v2.2
 

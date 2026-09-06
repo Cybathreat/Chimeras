@@ -1,5 +1,7 @@
 # Chimeras Development Roadmap
 
+> **This document covers v2.x only.** Current status: **v3.2 shipped** — see [ROADMAP-v3.0.md](ROADMAP-v3.0.md) for v3.0/v3.1/v3.2 and the v3.3+ backlog.
+
 **Scope**: Transform Chimeras from a fixed linear pipeline into a true **adaptive reasoning swarm** where WarChief acts as a real pentester lead: dispatching agents, adapting to findings, improvising when plans fail, and routing dynamically based on what the team discovers.
 
 ---

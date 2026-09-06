@@ -304,46 +304,68 @@ All 14 tasks completed in one session. 210 tests passing. Docker image built. Fu
 
 ---
 
-## v3.1 Planning — Council Session 18
+## v3.1 — COMPLETE ✅ (Sep 3, 2026)
 
-**Objective:** What's next? Chimeras v3.0 closed the gap with Strix. Now we need to surpass it.
+Council Session 18 — objective: surpass Strix on deliverables, not just ops controls.
 
-**Current v3.0 capabilities:**
-- Docker sandboxing (disposable Kali containers)
-- SARIF 2.1.0 export
-- Web search (Tavily + DuckDuckGo)
-- Budget management (USD cap)
-- Jinja2 prompt templates
-- 210 pytest tests
-- GitHub Actions CI
-- Scope enforcement (3-tier, fail-closed)
-- Human gates (exploitation + lateral)
-- Professional pentest report format
-- WarChief adaptive routing (12 decisions)
-- Soul system (9 bots, 3,018 lines)
-- JSON checkpoint/resume
-- Per-bot JSONL findings store
-- Ollama native support
+| Feature | Module | Notes |
+|---------|--------|-------|
+| PDF report export | `core/pdf_exporter.py` | WeasyPrint, client-ready, CVSS color-coded |
+| DOCX report export | `core/docx_exporter.py` | Editable format for clients |
+| Evidence Locker | `core/evidence.py` | SHA-256 hashed evidence chain, tamper-detectable manifest |
+| Compliance Mapper | `core/compliance.py` | OWASP ASVS 4.0, PCI DSS 4.0, ISO 27001:2022, NIST 800-53 Rev 5 |
+| Retest Verifier | `core/retest.py` | Re-runs PoCs → Closed/Open/Partial. Recurring revenue feature |
+| Context Compaction | `core/context_compaction.py` | Proactive, at 85% budget, before truncation |
+| Coverage Tracker | `core/coverage.py` | Per-target/port/service/tool, untested-gap report |
 
-**Still missing vs Strix:**
+**Tests:** 116 new → 383 total, all green.
+
+---
+
+## v3.2 — COMPLETE ✅ (Sep 3, 2026)
+
+Council Session 19 — sovereign procurement thesis. Commercial layer.
+
+| Feature | Module | Notes |
+|---------|--------|-------|
+| Client portal | `core/portal_exporter.py` | Self-contained HTML, zero data egress, sovereignty-compliant |
+| Proposal generator | `core/proposal_generator.py` | Pre-engagement SOW, 4 engagement types, DOCX+PDF |
+| Retest diff | `core/retest_diff.py` | Cross-engagement diff: NEW/FIXED/PERSISTENT/CHANGED |
+| Multilingual | `core/multilingual.py` | FR/AR locales, MENA/Africa wedge |
+| White-label branding | `core/branding.py` | JSON BrandConfig, consultant resale |
+| Ticketing export | `core/ticketing_export.py` | Jira CSV, ServiceNow JSON, GitLab issues |
+| Compliance expansion | `core/compliance.py` | +SOC 2, NIS2, NCA ECC → 7 frameworks |
+
+**Tests:** 383 all green, no regressions.
+
+---
+
+## v3.3+ Backlog — Unscheduled
+
+No council session has prioritized these yet. Candidates, grouped:
+
+### Agentic core (surpass Strix)
+- Parallel independent scans (bot dependency chains; `can_parallelize` already exists)
+- Tool-effectiveness learning — WarChief learns which tools work per target type
+- Dynamic team sizing — spawn specialized bots per attack vector
+- Agent debate/consensus for conflicting findings
+- Multi-target parallel engagements
+
+### Operator experience
+- Interactive TUI with live agent view (Strix has this, we don't)
+- Mid-engagement operator guidance (richer than binary y/n gates)
+- Web-based run viewer (transcript replay)
+- Revive cancelled DVWA integration test
+
+### Platform
 - MCP server support
 - Caido proxy integration
-- Full auto-fix/patching with verification loop
-- Skills system (Strix has 9 pentest skills)
-- PDF/DOCX report output
-- Compaction for context overflow (Strix has SDK-managed)
-- LiteLLM provider support (broader than our 6 providers)
-- Interactive TUI with live agent view
-- Run viewer (web-based transcript viewer)
-- Cloud platform (Strix has app.strix.ai)
+- LiteLLM-breadth provider support
+- Cloud/SaaS platform (app.chimeras equivalent)
+- Full auto-fix with verification loop (liability risk — needs careful design)
 
-**Chimeras advantages over Strix:**
-- Scope enforcement (code-level, multi-layer, fail-closed)
-- Fixed phase graph with human gates
-- Professional pentest report format (client-ready)
-- WarChief adaptive routing
-- Soul system (bot identity externalized)
-- Force-complete-cycle logic
-- Two-gate system (exploitation + lateral)
-- Artifact tracking + cleanup
-- Budget management (Strix has this too but Chimeras is per-bot/phase)
+---
+
+**Version**: Chimeras v3.2 — COMPLETE
+**Last Updated**: 2026-09-06
+**Status**: v3.0/v3.1/v3.2 shipped. v3.3 backlog unscheduled.
