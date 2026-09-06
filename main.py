@@ -21,7 +21,6 @@ import re
 import shutil
 import sys
 from pathlib import Path
-from datetime import datetime
 
 from core.config import ConfigManager
 from core.state import SwarmState
@@ -203,15 +202,27 @@ async def run_operation(mission_dir: Path, swarm_config: dict, auto_approve: boo
             engagement_dir=engagement_dir,
         )
 
+    from core.live_ui import OperationAbort
+
     try:
         # Execute graph
         final_state = await app.ainvoke(state)
+    except OperationAbort:
+        # v3.3: operator paused then quit (q) from the live TUI
+        print("\n" + "=" * 60)
+        print("OPERATION PAUSED — checkpoint preserved")
+        print(f"Resume: python main.py run --mission-dir {mission_dir} --resume")
+        print("=" * 60 + "\n")
+        return state
+    except KeyboardInterrupt:
+        print("\n" + "=" * 60)
+        print("OPERATION ABORTED (Ctrl+C) — checkpoint preserved")
+        print(f"Resume: python main.py run --mission-dir {mission_dir} --resume")
+        print("=" * 60 + "\n")
+        return state
     finally:
         if ui is not None:
             ui.stop()
-
-    print("\n" + "=" * 60)
-    print("OPERATION COMPLETE")
 
     print("\n" + "=" * 60)
     print("OPERATION COMPLETE")

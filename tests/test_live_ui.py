@@ -101,7 +101,8 @@ class TestCounters:
 
     def test_decisions_counted(self, tmp_path):
         ui = _ui(tmp_path)
-        ui.decision(); ui.decision()
+        ui.decision()
+        ui.decision()
         assert ui._decisions == 2
 
 
@@ -119,6 +120,29 @@ class TestNodeStatus:
         ui.node_started("wasp")
         ui.node_done("wasp", failed=True)
         assert ui._bots["wasp"]["status"] == "failed"
+
+
+class TestKeyQueue:
+    def test_pop_key_fifo_then_none(self, tmp_path):
+        ui = _ui(tmp_path)
+        assert ui.pop_key() is None
+        ui._key_queue.append("x")
+        ui._key_queue.append("p")
+        assert ui.pop_key() == "x"
+        assert ui.pop_key() == "p"
+        assert ui.pop_key() is None
+
+    def test_footer_shows_controls_and_pending_pause(self, tmp_path):
+        ui = _ui(tmp_path)
+        console = Console(file=io.StringIO(), width=140, force_terminal=True)
+        console.print(ui._footer())
+        out = console.file.getvalue()
+        assert "[p] pause" in out and "[q] quit" in out
+        assert "pause requested" not in out
+        ui._key_queue.append("p")
+        console2 = Console(file=io.StringIO(), width=140, force_terminal=True)
+        console2.print(ui._footer())
+        assert "pause requested" in console2.file.getvalue()
 
 
 class TestModuleLogRouting:

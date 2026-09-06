@@ -1056,6 +1056,33 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
                         ui.decision()
                         ui.set_mission_state(result.get("mission_state", ""))
             _checkpoint(result, name)
+
+            # v3.3: pause/quit control — reacts at node boundaries, after the
+            # checkpoint is written, so --resume never loses completed work.
+            if ui is not None and ui.is_active():
+                key = ui.pop_key()
+                if key in ("p", "P", "q", "Q"):
+                    from core.live_ui import OperationAbort
+                    from rich.console import Console as _Console
+                    from rich.prompt import Prompt as _Prompt
+                    _c = _Console()
+                    with ui.pause():
+                        _c.print()
+                        _c.print(
+                            "  [bold yellow]⏸  OPERATION PAUSED[/bold yellow] "
+                            "[dim]— checkpoint saved; state is safe[/dim]")
+                        try:
+                            action = _Prompt.ask(
+                                "  [bold]r[/bold]=resume · [bold]q[/bold]=quit "
+                                "(resume later with --resume)",
+                                choices=["r", "q"], default="r",
+                            )
+                        except (EOFError, OSError, KeyboardInterrupt):
+                            action = "q"
+                    if action == "q":
+                        raise OperationAbort(
+                            f"operator paused-and-quit after node '{name}'")
+                    ui.log("warchief", "PAUSE", "Operation resumed by operator")
             return result
         return wrapped
 

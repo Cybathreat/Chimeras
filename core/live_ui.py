@@ -25,11 +25,12 @@ Integration:
 """
 
 import json
+import sys
 import threading
 import time
 from collections import deque
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -61,6 +62,12 @@ _STATUS_STYLE = {
     "running": "bold green", "done": "green", "waiting": "dim",
     "failed": "bold red", "skipped": "dim yellow",
 }
+
+
+class OperationAbort(Exception):
+    """Raised inside a graph node wrapper when the operator pauses and
+    chooses to quit. The checkpoint from the last completed node stays
+    on disk — `python main.py run --resume` continues from there."""
 
 
 class _Frame:
@@ -100,6 +107,15 @@ class OperationUI:
         self.console = Console()
         self._live: Optional[Live] = None
 
+        # Keyboard control: background thread reads single keys in cbreak
+        # mode while the Live screen owns the terminal; graph nodes pop them
+        # at node boundaries. p = pause, q = pause-and-quit.
+        self._key_queue: deque = deque(maxlen=16)
+        self._kb_thread: Optional[threading.Thread] = None
+        self._kb_stop = threading.Event()
+        self._kb_fd: Optional[int] = None
+        self._kb_termios = None
+
     # ── lifecycle ────────────────────────────────────────────────────
 
     @classmethod
@@ -121,8 +137,10 @@ class OperationUI:
         self._live = Live(_Frame(self), console=self.console,
                           screen=True, refresh_per_second=4, transient=False)
         self._live.start()
+        self._start_keyboard()
 
     def stop(self):
+        self._stop_keyboard()
         if self._live is not None:
             try:
                 self._live.update(self._render_frame(), refresh=True)
@@ -134,18 +152,75 @@ class OperationUI:
     def is_active(self) -> bool:
         return self._live is not None
 
+    # ── keyboard listener (pause/quit control) ───────────────────────
+
+    def _start_keyboard(self):
+        if not sys.stdin.isatty():
+            return
+        import termios
+        self._kb_fd = sys.stdin.fileno()
+        self._kb_termios = termios.tcgetattr(self._kb_fd)
+        self._kb_stop.clear()
+        self._kb_thread = threading.Thread(
+            target=self._kb_loop, name="tui-keys", daemon=True)
+        self._kb_thread.start()
+
+    def _kb_loop(self):
+        import select
+        import termios
+        import tty
+        fd = self._kb_fd
+        try:
+            tty.setcbreak(fd)
+            while not self._kb_stop.is_set():
+                r, _, _ = select.select([fd], [], [], 0.2)
+                if not r:
+                    continue
+                try:
+                    ch = sys.stdin.read(1)
+                except OSError:
+                    break
+                if ch:
+                    with self._lock:
+                        self._key_queue.append(ch)
+        except (OSError, termios.error):
+            pass
+        finally:
+            if self._kb_termios is not None:
+                try:
+                    termios.tcsetattr(fd, termios.TCSADRAIN, self._kb_termios)
+                except termios.error:
+                    pass
+
+    def _stop_keyboard(self):
+        self._kb_stop.set()
+        t = self._kb_thread
+        if t and t.is_alive():
+            t.join(timeout=1.0)
+        self._kb_thread = None
+
+    def pop_key(self) -> Optional[str]:
+        """Return the oldest queued keypress, or None."""
+        with self._lock:
+            if self._key_queue:
+                return self._key_queue.popleft()
+        return None
+
     @contextmanager
     def pause(self):
-        """Suspend the live display so input()/Prompts work normally."""
+        """Suspend the live display and the keyboard listener so
+        input()/Prompts work normally."""
         live, self._live = self._live, None
         was_started = live is not None
         if was_started:
+            self._stop_keyboard()
             live.stop()
         try:
             yield
         finally:
             if was_started:
                 live.start()
+                self._start_keyboard()
                 self._live = live
 
     # ── event API (called from bots / graph nodes) ───────────────────
@@ -328,11 +403,17 @@ class OperationUI:
             n_findings = len(self._findings)
             tools = self._tool_execs
             decisions = self._decisions
+        with self._lock:
+            pending = [k for k in self._key_queue if k in ("p", "P", "q", "Q")]
+        pause_note = ""
+        if pending:
+            pause_note = "⏸ pause requested — takes effect after current bot"
         text = Text.assemble(
             (f" findings: {n_findings}", "bold"),
             (f"   tool execs: {tools}", "bold"),
             (f"   decisions: {decisions}", "bold"),
-            ("   Ctrl+C to abort", "dim"),
+            ("   [p] pause · [q] quit · Ctrl+C abort", "dim"),
+            (f"   {pause_note}" if pause_note else "", "bold yellow"),
         )
         return Panel(text, style="dim", padding=(0, 1))
 
