@@ -5,8 +5,8 @@ Flicker-free full-screen rendering for a running operation (Rich Live).
 
 Layout:
   Header   — mission name, scope, elapsed time, mission state
-  Left     — Findings: live table from the per-bot JSONL findings store
-  Right    — Progress: per-bot status table + rolling activity log
+  Left     — Progress: per-bot status table + rolling activity log
+  Right    — Findings: live table from the per-bot JSONL findings store
   Footer   — counters (findings by severity, tool executions, decisions, phase)
 
 Design notes:
@@ -218,8 +218,8 @@ class OperationUI:
             Layout(name="footer", size=3),
         )
         layout["body"].split_row(
-            Layout(name="findings", ratio=1),
             Layout(name="progress", ratio=1),
+            Layout(name="findings", ratio=1),
         )
         layout["header"].update(self._header())
         layout["findings"].update(self._findings_panel())
