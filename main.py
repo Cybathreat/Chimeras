@@ -16,8 +16,10 @@ When you run `python main.py` with no arguments, the wizard:
 import asyncio
 import argparse
 import json
+import os
 import re
 import shutil
+import sys
 from pathlib import Path
 from datetime import datetime
 
@@ -190,17 +192,26 @@ async def run_operation(mission_dir: Path, swarm_config: dict, auto_approve: boo
     # Compile graph
     app = compile_graph(swarm_config, auto_approve)
 
-    print("\n" + "=" * 60)
-    print("CHIMERAS OPERATION LAUNCHED")
-    print("=" * 60)
-    print(f"Mission: {state['mission'].get('name')}")
-    print(f"Target: {target_scope or 'N/A'}")
-    print(f"Started: {datetime.utcnow().isoformat()}")
-    print(f"Engagement: {engagement_dir}")
-    print("=" * 60 + "\n")
+    # v3.3: flicker-free live TUI (findings left, progress right).
+    # Set CHIMERAS_NO_TUI=1 or run without a TTY for legacy print output.
+    from core.live_ui import OperationUI
+    ui = None
+    if sys.stdout.isatty() and os.environ.get("CHIMERAS_NO_TUI") != "1":
+        ui = OperationUI.create(
+            mission_name=state["mission"].get("name", ""),
+            scope=target_scope,
+            engagement_dir=engagement_dir,
+        )
 
-    # Execute graph
-    final_state = await app.ainvoke(state)
+    try:
+        # Execute graph
+        final_state = await app.ainvoke(state)
+    finally:
+        if ui is not None:
+            ui.stop()
+
+    print("\n" + "=" * 60)
+    print("OPERATION COMPLETE")
 
     print("\n" + "=" * 60)
     print("OPERATION COMPLETE")

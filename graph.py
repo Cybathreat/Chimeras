@@ -1027,12 +1027,34 @@ def create_swarm_graph(swarm_config: Optional[Dict[str, Any]] = None,
 
     # ─── Add all nodes (v2.5: wrapped with checkpoint) ───
     def _with_checkpoint(node_func, name):
-        """Wrap a node function to save checkpoint after execution."""
+        """Wrap a node function: TUI status hooks + checkpoint after execution."""
         async def wrapped(state):
-            if asyncio.iscoroutinefunction(node_func):
-                result = await node_func(state)
-            else:
-                result = node_func(state)
+            import contextlib
+            from core.live_ui import OperationUI
+
+            ui = OperationUI.current()
+            if ui is not None and ui.is_active():
+                ui.node_started(name)
+            # Gates use input() — suspend the live screen around them
+            gate_ctx = (ui.pause() if (ui is not None and ui.is_active()
+                                       and name in ("human_approval", "lateral_approval"))
+                        else contextlib.nullcontext())
+            failed = False
+            try:
+                with gate_ctx:
+                    if asyncio.iscoroutinefunction(node_func):
+                        result = await node_func(state)
+                    else:
+                        result = node_func(state)
+            except Exception:
+                failed = True
+                raise
+            finally:
+                if ui is not None and ui.is_active():
+                    ui.node_done(name, failed=failed)
+                    if name == "warchief" and not failed:
+                        ui.decision()
+                        ui.set_mission_state(result.get("mission_state", ""))
             _checkpoint(result, name)
             return result
         return wrapped

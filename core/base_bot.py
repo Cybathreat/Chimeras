@@ -144,16 +144,17 @@ class BaseBot(ABC):
     # ─── Logging ───
 
     def _log(self, message: str, level: str = "INFO"):
+        # v3.3: route to live TUI activity feed when active; else legacy print
+        from core.live_ui import log as _ui_log
+        if _ui_log(self.bot_name, level, message):
+            return
         ts = datetime.utcnow().isoformat()
         print(f"[{ts}] [{self.bot_name.upper()}] [{level}] {message}", flush=True)
 
     def _banner(self):
-        """Print a bot banner."""
+        """Announce bot start (to TUI activity feed or console)."""
         scope = ScopeEnforcer.describe_scope(self.bot_name)
-        print(f"\n{'─' * 60}", flush=True)
-        print(f"  {self.bot_name.upper()} — {self.role_description}", flush=True)
-        print(f"  Scope: {scope}", flush=True)
-        print(f"{'─' * 60}\n", flush=True)
+        self._log(f"{self.role_description} | scope: {scope}", "WAKE")
 
     # ─── LLM calls ───
 
