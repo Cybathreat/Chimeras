@@ -54,6 +54,15 @@ class BaseBot(ABC):
         mission_scope = mission.get("scope", "")
         internal_scope = state.get("internal_scope", "")
         mission_roe = mission.get("roe", "")
+        # v3.3: Initialize AuthManager for grey/white-box engagements
+        self.auth_manager = self._init_auth_manager()
+        # Determine which auth target to use (first configured, or from state)
+        auth_target_id = ""
+        if self.auth_manager and self.auth_manager.targets:
+            auth_target_id = state.get("auth_target_id", "")
+            if not auth_target_id:
+                # Default to first available target
+                auth_target_id = next(iter(self.auth_manager.targets))
         self.executor = ToolExecutor(
             timeout=180,
             workdir="/tmp",
@@ -61,6 +70,8 @@ class BaseBot(ABC):
             mission_scope=mission_scope,
             internal_scope=internal_scope,
             roe=mission_roe,
+            auth_manager=self.auth_manager,
+            auth_target_id=auth_target_id if auth_target_id else None,
         )
         # v3.0: Tiered Docker sandbox — per-bot images, kernel scope enforcement, evidence chain
         self._enable_docker = self.state.get("enable_docker", False) or self.swarm_config.get("enable_docker", False)
@@ -126,6 +137,33 @@ class BaseBot(ABC):
 
     def _init_router(self) -> LLMRouter:
         return LLMRouter.from_config(self.bot_name, self.swarm_config)
+
+    def _init_auth_manager(self) -> Optional[Any]:
+        """v3.3: Initialize AuthManager from state auth config.
+
+        Returns None if no auth targets configured (black-box engagement).
+        """
+        auth_config = self.state.get("auth_config") or self.swarm_config.get("auth", {})
+        if not auth_config or not auth_config.get("targets"):
+            return None
+        try:
+            from core.auth_manager import AuthManager
+            # Resolve engagement dir for session persistence
+            eng_dir = None
+            self._resolve_engagement_dir()
+            if self.engagement_dir:
+                eng_dir = self.engagement_dir
+            manager = AuthManager(auth_config, eng_dir)
+            if manager.targets:
+                self._log(
+                    f"AuthManager initialized — {len(manager.targets)} targets: "
+                    f"{', '.join(manager.list_targets())}",
+                    "AUTH"
+                )
+                return manager
+        except Exception as e:
+            self._log(f"AuthManager init failed: {e}", "AUTH")
+        return None
 
     def _resolve_engagement_dir(self):
         eng = self.state.get("engagement_dir")

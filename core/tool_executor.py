@@ -30,19 +30,28 @@ class ToolExecutor:
     v2: Scope enforcement now includes target validation and shell
     metacharacter injection checks. The executor receives the mission
     scope and bot name so it can validate targets before execution.
+
+    v3.3: Optional AuthManager integration. When provided, auth context
+    (tokens, cookies, headers) is injected into tool commands before
+    execution. The executor queries AuthManager for the appropriate
+    auth arguments based on the target and tool being run.
     """
 
     def __init__(self, timeout: int = 120, workdir: Optional[str] = None,
                  bot_name: str = "", mission_scope: str = "",
-                 internal_scope: str = "", roe: str = ""):
+                 internal_scope: str = "", roe: str = "",
+                 auth_manager: Optional[Any] = None,
+                 auth_target_id: Optional[str] = None):
         self.timeout = timeout
         self.workdir = workdir or "/tmp"
         self.bot_name = bot_name
         self.mission_scope = mission_scope
         self.internal_scope = internal_scope
         self.roe = roe
+        # v3.3: Auth integration
+        self.auth_manager = auth_manager
+        self.auth_target_id = auth_target_id
 
-    @staticmethod
     def _sanitize_command(command: str) -> str:
         """Strip output-file flags that cause tools to fail when paths don't exist.
         The executor captures stdout directly, so -oN/-oX/-oG/-oS are redundant.
@@ -58,6 +67,71 @@ class ToolExecutor:
         if 'nikto' in command and '-maxtime' not in command:
             command += ' -maxtime 120'
         return command.strip()
+
+    def _inject_auth(self, command: str) -> str:
+        """v3.3: Inject auth context into tool commands.
+
+        Detects the tool being run and appends appropriate auth arguments
+        from the AuthManager. Supports curl, sqlmap, nikto, nmap, ldapsearch,
+        ssh, and generic HTTP tools.
+        """
+        if not self.auth_manager or not self.auth_target_id:
+            return command
+        if not self.auth_manager.has_auth(self.auth_target_id):
+            return command
+
+        cmd_lower = command.lower()
+
+        # Don't double-inject auth (check for existing auth flags)
+        auth_indicators = ['--auth-type=', '--auth-cred=', '-u "', '--ntlm',
+                           '-h "authorization:', '-h "cookie:', '--cookie=',
+                           '--header="authorization']
+        for indicator in auth_indicators:
+            if indicator in cmd_lower:
+                return command  # Already has auth
+
+        # Tool-specific injection
+        if cmd_lower.startswith('curl ') or ' curl ' in cmd_lower:
+            auth_args = self.auth_manager.get_curl_auth_args(self.auth_target_id)
+            if auth_args:
+                # Insert auth args before the URL
+                return command + " " + auth_args
+
+        elif cmd_lower.startswith('sqlmap ') or ' sqlmap ' in cmd_lower:
+            auth_args = self.auth_manager.get_sqlmap_auth_args(self.auth_target_id)
+            if auth_args:
+                return command + " " + auth_args
+
+        elif cmd_lower.startswith('nikto ') or ' nikto ' in cmd_lower:
+            # Nikto uses -id for auth: user:pass
+            cred = self.auth_manager.targets.get(self.auth_target_id)
+            if cred and cred.username:
+                return command + f" -id \"{cred.username}:{cred.password}\""
+
+        elif cmd_lower.startswith('nmap ') or ' nmap ' in cmd_lower:
+            auth_args = self.auth_manager.get_nmap_auth_args(self.auth_target_id)
+            if auth_args:
+                return command + " " + auth_args
+
+        elif cmd_lower.startswith('ldapsearch ') or ' ldapsearch ' in cmd_lower:
+            # For ldapsearch, use the AuthManager's built-in command builder
+            built_cmd = self.auth_manager.get_ldapsearch_command(self.auth_target_id)
+            if built_cmd:
+                return built_cmd
+
+        elif cmd_lower.startswith('ssh ') or ' sshpass ' in cmd_lower:
+            ssh_prefix = self.auth_manager.get_ssh_command_prefix(self.auth_target_id)
+            if ssh_prefix:
+                return ssh_prefix
+
+        # Generic fallback: inject auth headers for HTTP tools (ffuf, gobuster, etc.)
+        elif any(t in cmd_lower for t in ('ffuf', 'gobuster', 'wfuzz', 'httpx', 'arjun')):
+            headers = self.auth_manager.get_headers(self.auth_target_id)
+            if headers:
+                for hname, hvalue in headers.items():
+                    command += f' -H "{hname}: {hvalue}"'
+
+        return command
 
     def run(self, command: str, timeout: Optional[int] = None) -> Dict[str, Any]:
         """
@@ -90,6 +164,8 @@ class ToolExecutor:
         # Now _run_tool() does the single check and executor.run() just executes.
 
         command = self._sanitize_command(command)
+        # v3.3: Inject auth context for grey/white-box engagements
+        command = self._inject_auth(command)
         start = time.time()
 
         # v2.3: Security — use shell=False for non-shell-capable bots.

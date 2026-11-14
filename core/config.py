@@ -43,6 +43,10 @@ DEFAULT_SWARM_CONFIG = {
     "enable_docker": False,
     # v3.0: Budget management (USD cap per engagement, None = unlimited)
     "budget_usd": None,
+    # v3.3: Authentication for grey/white-box engagements
+    "auth": {
+        "targets": [],  # List of AuthCredential dicts
+    },
 }
 
 # Engagement folder structure
@@ -51,6 +55,7 @@ ENGAGEMENT_DIRS = [
     "findings",
     "poc",
     "raw",
+    "auth",
 ]
 
 ENGAGEMENT_FILES = {
@@ -230,6 +235,9 @@ Meticulous, impartial, complete. Records everything.
             config["max_loops_per_phase"] = 5
         if "default_aggressiveness" not in config:
             config["default_aggressiveness"] = "cautious"
+        # v3.3: Add auth section if missing
+        if "auth" not in config:
+            config["auth"] = {"targets": []}
 
         # Update version
         config["version"] = CONFIG_VERSION

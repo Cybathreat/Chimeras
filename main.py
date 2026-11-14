@@ -45,6 +45,7 @@ def _clean_engagement_dir(engagement_dir: Path) -> None:
     (engagement_dir / "report").mkdir(exist_ok=True)
     (engagement_dir / "poc").mkdir(exist_ok=True)
     (engagement_dir / "findings").mkdir(exist_ok=True)
+    (engagement_dir / "auth").mkdir(exist_ok=True)
 
 
 def parse_scope_from_mission(mission_path: Path) -> str:
@@ -152,6 +153,9 @@ async def run_operation(mission_dir: Path, swarm_config: dict, auto_approve: boo
         approved_extra_targets=[],
         # v3.0: Docker sandboxing
         enable_docker=swarm_config.get("enable_docker", False),
+        # v3.3: Authentication for grey/white-box engagements
+        auth_config=swarm_config.get("auth", {"targets": []}),
+        auth_sessions={},
     )
 
     # v3.0: Docker mode — tool discovery must see INSIDE the tier images.

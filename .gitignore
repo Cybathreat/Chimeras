@@ -58,3 +58,10 @@ htmlcov/
 # Lock files (regenerate as needed)
 poetry.lock
 Pipfile.lock
+
+# Media / demo artifacts
+brag-output*/
+video-render/
+*.mp4
+*.cast
+presentation-script.md

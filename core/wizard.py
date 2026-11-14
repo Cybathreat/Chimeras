@@ -524,6 +524,177 @@ def show_config_summary(config: Dict[str, Any]):
     console.print(f"  [bold]Bots:[/bold] {len(config.get('bots', {}))} configured")
 
 
+# ─── v3.3: Auth configuration ───────────────────────────────────────────
+
+AUTH_METHODS = [
+    ("web_form",                          "Web — Form login (POST username/password)"),
+    ("web_basic",                         "Web — HTTP Basic Auth"),
+    ("web_bearer",                        "Web — Bearer token (pre-existing)"),
+    ("web_jwt",                           "Web — JWT token (pre-existing)"),
+    ("web_cookie",                        "Web — Cookies (pre-existing)"),
+    ("web_api_key",                       "Web — API key in header"),
+    ("web_oauth2_password",               "Web — OAuth2 password grant"),
+    ("web_oauth2_client_credentials",     "Web — OAuth2 client_credentials grant"),
+    ("web_ntlm",                          "Web — NTLM auth"),
+    ("ad_ldap_bind",                      "Active Directory — LDAP bind"),
+    ("ad_kerberos",                       "Active Directory — Kerberos (kinit)"),
+    ("ad_ntlm",                           "Active Directory — NTLM"),
+    ("keycloak_oauth2_password",          "Keycloak — OAuth2 password grant"),
+    ("keycloak_oauth2_client_credentials","Keycloak — OAuth2 client_credentials grant"),
+    ("keycloak_oidc",                     "Keycloak — OIDC"),
+    ("ldap_simple",                       "LDAP — Simple bind"),
+    ("ldap_sasl",                         "LDAP — SASL (DIGEST-MD5/GSSAPI)"),
+    ("ldap_anonymous",                    "LDAP — Anonymous bind"),
+    ("db_mysql",                          "Database — MySQL"),
+    ("db_postgresql",                     "Database — PostgreSQL"),
+    ("db_mssql",                          "Database — MSSQL"),
+    ("ssh_password",                      "SSH — Password"),
+    ("ssh_key",                           "SSH — Key-based"),
+]
+
+# Fields needed per method (for prompting)
+AUTH_REQUIRED_FIELDS: Dict[str, List[str]] = {
+    "web_form":                           ["url", "username", "password"],
+    "web_basic":                          ["url", "username", "password"],
+    "web_bearer":                         ["url", "token"],
+    "web_jwt":                            ["token"],
+    "web_cookie":                         ["cookies"],
+    "web_api_key":                        ["url", "token"],
+    "web_oauth2_password":                ["url", "username", "password", "client_id"],
+    "web_oauth2_client_credentials":      ["url", "client_id", "client_secret"],
+    "web_ntlm":                           ["url", "username", "password", "domain"],
+    "ad_ldap_bind":                       ["domain", "username", "password", "ldap_server", "ldap_base_dn"],
+    "ad_kerberos":                        ["username", "password", "realm"],
+    "ad_ntlm":                            ["url", "username", "password", "domain"],
+    "keycloak_oauth2_password":           ["url", "username", "password", "client_id"],
+    "keycloak_oauth2_client_credentials": ["url", "client_id", "client_secret"],
+    "keycloak_oidc":                      ["url", "username", "password", "client_id"],
+    "ldap_simple":                        ["ldap_server", "username", "password", "ldap_base_dn"],
+    "ldap_sasl":                          ["ldap_server", "username", "password"],
+    "ldap_anonymous":                     ["ldap_server", "ldap_base_dn"],
+    "db_mysql":                           ["db_host", "username", "password"],
+    "db_postgresql":                      ["db_host", "username", "password"],
+    "db_mssql":                           ["db_host", "username", "password"],
+    "ssh_password":                       ["url", "username", "password"],
+    "ssh_key":                            ["url", "username", "ssh_key_path"],
+}
+
+# Human-readable field prompts
+FIELD_PROMPTS = {
+    "url":            ("Login URL or token endpoint", ""),
+    "username":       ("Username", ""),
+    "password":       ("Password", ""),
+    "domain":         ("AD Domain (e.g. CORP)", ""),
+    "realm":          ("Kerberos Realm (e.g. CORP.LOCAL)", ""),
+    "token":          ("Token value", ""),
+    "client_id":      ("Client ID", ""),
+    "client_secret":  ("Client Secret", ""),
+    "scope":          ("OAuth2 Scope (empty = default)", ""),
+    "ldap_server":    ("LDAP server URL (e.g. ldap://dc01.corp.local)", ""),
+    "ldap_base_dn":   ("LDAP Base DN (e.g. dc=corp,dc=local)", ""),
+    "db_host":        ("Database host", ""),
+    "db_name":        ("Database name", ""),
+    "ssh_key_path":   ("SSH key file path", ""),
+}
+
+
+def configure_auth(config: Dict[str, Any], config_path: Path) -> Dict[str, Any]:
+    """Interactive auth configuration for grey/white-box engagements.
+
+    Lets the operator add auth targets (web portal, AD, LDAP, Keycloak, etc.)
+    that bots will use to authenticate before testing.
+    """
+    console.print()
+    console.print("  [dim]Configure credentials for authenticated testing.[/dim]")
+    console.print("  [dim]Leave empty for black-box (no credentials) engagements.[/dim]")
+    console.print()
+
+    auth_section = config.get("auth", {"targets": []})
+    targets = auth_section.get("targets", [])
+
+    if not Confirm.ask("  Configure authentication targets?", default=bool(targets)):
+        if not targets:
+            return config  # Black-box — no auth needed
+        # Keep existing
+        return config
+
+    while True:
+        console.print()
+        console.print("  [bold]Available auth methods:[/bold]")
+        for i, (method_id, method_label) in enumerate(AUTH_METHODS, 1):
+            console.print(f"    {i}. {method_label}")
+
+        console.print()
+        choice = Prompt.ask("  Method number (or 'done' to finish)", default="done")
+
+        if choice.lower() == "done":
+            break
+
+        try:
+            method_idx = int(choice) - 1
+            method_id, method_label = AUTH_METHODS[method_idx]
+        except (ValueError, IndexError):
+            console.print("  [red]Invalid selection[/red]")
+            continue
+
+        # Get target ID
+        console.print()
+        target_id = Prompt.ask("  Target ID (logical name, e.g. 'web_portal')", default=method_id)
+
+        # Check for duplicate
+        existing_ids = [t.get("target_id") for t in targets if isinstance(t, dict)]
+        if target_id in existing_ids:
+            if not Confirm.ask(f"  Target '{target_id}' already exists. Replace?", default=True):
+                continue
+            targets = [t for t in targets if t.get("target_id") != target_id]
+
+        # Prompt for required fields
+        target_config: Dict[str, Any] = {
+            "target_id": target_id,
+            "method": method_id,
+        }
+
+        required = AUTH_REQUIRED_FIELDS.get(method_id, [])
+        for field_name in required:
+            prompt_text, default_val = FIELD_PROMPTS.get(field_name, (field_name, ""))
+            is_secret = field_name in ("password", "client_secret", "token")
+            if is_secret:
+                value = Prompt.ask(f"  {prompt_text}", password=True, default=default_val)
+            else:
+                value = Prompt.ask(f"  {prompt_text}", default=default_val)
+            if value:
+                target_config[field_name] = value
+
+        # Optional fields
+        if Confirm.ask("  Configure optional fields?", default=False):
+            optional_fields = [f for f in FIELD_PROMPTS if f not in required]
+            for field_name in optional_fields:
+                prompt_text, default_val = FIELD_PROMPTS.get(field_name, (field_name, ""))
+                is_secret = field_name in ("password", "client_secret", "token")
+                value = Prompt.ask(f"  {prompt_text} (empty = skip)", password=is_secret, default="")
+                if value:
+                    target_config[field_name] = value
+
+        target_config["description"] = Prompt.ask(
+            "  Description (optional)", default=""
+        )
+
+        targets.append(target_config)
+        console.print(f"  [green]✓  Added auth target '{target_id}' ({method_id})[/green]")
+
+        if not Confirm.ask("  Add another auth target?", default=False):
+            break
+
+    auth_section["targets"] = targets
+    config["auth"] = auth_section
+
+    with open(config_path, "w") as f:
+        json.dump(config, f, indent=2)
+    console.print(f"  [green]✓  Auth configuration saved ({len(targets)} targets)[/green]")
+
+    return config
+
+
 def run_wizard(mission_dir: Optional[Path] = None) -> Optional[tuple[Dict[str, Any], Path]]:
     """Run the full TUI setup wizard.
 
@@ -666,8 +837,13 @@ def run_wizard(mission_dir: Optional[Path] = None) -> Optional[tuple[Dict[str, A
                     console.print("  [bold]Retrying connectivity check...[/bold]")
                     continue  # Loop back to step 2
 
-            # ─── Step 3: Summary ───
-            step_header(3, "Configuration Summary", "Ready to launch")
+            # ─── Step 3: Auth Configuration (grey/white-box) ───
+            step_header(3, "Authentication Setup", "Configure credentials for grey/white-box engagements")
+
+            config = configure_auth(config, config_path)
+
+            # ─── Step 4: Summary ───
+            step_header(4, "Configuration Summary", "Ready to launch")
 
             show_config_summary(config)
 

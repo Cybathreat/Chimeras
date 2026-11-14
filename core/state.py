@@ -169,3 +169,12 @@ class SwarmState(TypedDict, total=False):
 
     # v2.3: Scope version for tool cache invalidation propagation
     scope_version: int
+
+    # ─── v3.3: Authentication for grey/white-box engagements ───
+    # Auth config dict from swarm-config.json "auth" section.
+    # Format: {"targets": [{"target_id": "web_portal", "method": "web_form", ...}]}
+    auth_config: Dict[str, Any]
+
+    # Auth sessions populated by AuthManager during engagement.
+    # Keyed by target_id, values are AuthSession dicts.
+    auth_sessions: Dict[str, Dict[str, Any]]
